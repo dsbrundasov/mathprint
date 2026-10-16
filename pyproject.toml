@@ -26,6 +26,7 @@ dev = [
 
 [tool.setuptools]
 package-dir = { "" = "src" }
+py-modules = ["mathprint_boot"]
 include-package-data = true
 
 [tool.setuptools.packages.find]

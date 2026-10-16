@@ -12,8 +12,11 @@
 ## Возможности
 
 ```python
-from mathprint import macros, mpt
+from mathprint_boot import mpt
 
+import sympy as sp
+
+a = sp.symbols("a")   # символьная переменная
 y = 5
 z = 10
 
@@ -87,27 +90,54 @@ python -m pip uninstall mathprint
 
 ## Использование
 
-### Импорт
+Макрос `mpt` можно подключить двумя способами.
 
-Макро-импорт **обязан** начинаться со служебного имени `macros` — так требует mcpyrate:
+### Вариант A — одна строка (рекомендуется)
 
 ```python
+from mathprint_boot import mpt
+```
+
+Это тот же модуль-помощник `mathprint_boot`, который ставится вместе с пакетом.
+После него `mpt[...]` сразу доступен:
+
+```python
+from mathprint_boot import mpt
+
+y = 5
+z = 10
+mpt[x := y * 7 + z]
+```
+
+Такой скрипт запускается и обычным `python`, и через `macropython` — см. ниже.
+Копировать в файл никакой «bootstrap»-блок не нужно.
+
+Дополнительно `mathprint_boot` также выставляет имя `mpt` как глобальный макрос
+mcpyrate, поэтому импорт `mpt` из него — это и есть подключение макроса.
+
+### Вариант B — явная форма mcpyrate
+
+Если предпочитаете «канонический» макро-импорт mcpyrate, он тоже работает:
+
+```python
+import mathprint_boot  # noqa: F401
 from mathprint import macros, mpt
 ```
 
-Имя `macros` — это маркер, который говорит mcpyrate, что дальше идут макросы.
-Фактически из пакета вы получаете только `mpt`. Импортировать «только `mpt`»
-(`from mathprint import mpt`) **нельзя**: такой импорт не будет распознан как
-макро-импорт, и `mpt[...]` упадёт во время выполнения с
-`'function' object is not subscriptable`.
+Здесь макро-импорт **обязан** начинаться со служебного имени `macros` — так
+требует mcpyrate. Имя `macros` — маркер; фактически из пакета вы получаете только
+`mpt`. Импортировать напрямую `from mathprint import mpt` (без `macros`) нельзя:
+такой импорт не будет распознан как макро-импорт, и `mpt[...]` упадёт во время
+выполнения с `'function' object is not subscriptable`. Именно для этого и нужен
+`mathprint_boot`.
 
 ### Как запускать скрипт с макросом
 
-Macros раскрываются во время компиляции. Python компилирует главный скрипт
+Макросы раскрываются во время компиляции. Python компилирует главный скрипт
 **до** выполнения его кода, поэтому обычный `python myscript.py` сам по себе
 хук не включит. Варианты:
 
-1. **Через macropython** (самый простой):
+1. **Через macropython** (без правок скрипта):
 
    ```powershell
    macropython myscript.py
@@ -119,16 +149,20 @@ Macros раскрываются во время компиляции. Python к�
    python -m mcpyrate.repl.macropython myscript.py
    ```
 
-2. **Обычным `python`, добавив bootstrap-блок** в начало скрипта.
-   Скопируйте его из начала `examples/demo.py` — блок между комментариями
-   `# --- Bootstrap ...` и `# ---...---`. После этого работает обычный запуск:
+2. **Обычным `python myscript.py`** — достаточно, чтобы первой строкой скрипта
+   был `from mathprint_boot import mpt` (вариант A) или `import mathprint_boot`
+   (вариант B).
 
-   ```powershell
-   python myscript.py
-   ```
+   `mathprint_boot` при импорте проверяет, активен ли mcpyrate, и при
+   необходимости перекомпилирует и перезапускает скрипт уже с включённым
+   раскрытием макросов. Под `macropython` (и при повторном запуске) он ничего
+   лишнего не делает.
 
-   Блок сам определяет, активен ли mcpyrate, и при необходимости перезапускает
-   файл уже с включённым раскрытием макросов.
+   Важно: ставьте этот импорт **самой первой строкой**, до любого другого кода,
+   потому что при обычном запуске файл исполняется дважды (второй раз — уже с
+   раскрытыми макросами).
+
+Оба варианта импорта (`A` и `B`) работают и под `python`, и под `macropython`.
 
 ### Pylance / Pyright
 
@@ -201,6 +235,7 @@ pyproject.toml          # метаданные пакета и сборка
 README.md               # этот файл
 pyrightconfig.json      # настройки Pyright/Pylance
 src/
+  mathprint_boot.py     # одна строка `from mathprint_boot import mpt`
   mathprint/
     __init__.py         # реализация макроса mpt
     __init__.pyi        # типовые заглушки (для Pylance)
@@ -211,5 +246,5 @@ typings/
 tests/
   test_mathprint.py     # тесты
 examples/
-  demo.py               # пример использования + bootstrap
+  demo.py               # пример использования (одна строка bootstrap + mpt)
 ```

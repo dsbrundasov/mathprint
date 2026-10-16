@@ -1,0 +1,106 @@
+"""One-line bootstrap for running scripts that use the ``mathprint`` macros under plain ``python``.
+
+Put this at the top of your script::
+
+    from mathprint_boot import mpt
+
+Then use ``mpt[...]`` directly, without a separate macro-import line::
+
+    from mathprint_boot import mpt
+
+    y = 5
+    z = 10
+    mpt[x := y * 7 + z]
+
+The script then runs under both::
+
+    python myscript.py
+    macropython myscript.py
+
+The classic mcpyrate macro-import form keeps working, too::
+
+    import mathprint_boot  # noqa: F401
+    from mathprint import macros, mpt
+
+**Why this is needed.** mcpyrate expands macros while a source file is being
+compiled, but Python compiles the main script *before* running any of its code,
+so the macro hook cannot be installed in time from within the script itself. On
+import, this module activates the hook and re-compiles + re-runs the calling
+script with the ``mpt`` macro registered. Under ``macropython`` (or on that
+re-run) it does nothing, so the import is always safe.
+
+Because the first (plain) run stops at the import and re-runs the file, put this
+import **before** any other top-level side effects, ideally as line 1.
+"""
+
+import os
+import sys
+from importlib.machinery import SourceFileLoader
+from typing import Any
+
+__all__ = ["is_active", "mpt"]
+
+
+def is_active():
+    """Return whether mcpyrate's macro-aware import hook is installed."""
+    return SourceFileLoader.source_to_code.__module__ == "mcpyrate.importer"
+
+
+def _import_site_globals(start_frame):
+    """Globals of the frame that performed the import, skipping importlib internals."""
+    frame = start_frame
+    while frame is not None:
+        name = frame.f_globals.get("__name__", "")
+        if name and name != "mathprint_boot" and "importlib" not in name:
+            return frame.f_globals
+        frame = frame.f_back
+    return None
+
+
+def _load_macro():
+    """Activate mcpyrate and return the ``mpt`` macro function."""
+    import mcpyrate  # noqa: F401  activates the macro-aware import hook on first import
+    import mathprint
+    return mathprint.mpt
+
+
+_MISSING: Any = object()
+
+
+def _run_as_main(path, macro):
+    """Re-compile and re-run the top-level script with ``mpt`` available as a macro."""
+    from mcpyrate.compiler import compile as mcompile
+    from mcpyrate.core import global_bindings
+
+    with open(path, "rb") as f:
+        source = f.read()
+
+    # Register the macro only while compiling the script, so that this does not
+    # affect any other module imported later in the process.
+    previous: Any = global_bindings.get("mpt", _MISSING)
+    global_bindings["mpt"] = macro
+    try:
+        code = mcompile(source, filename=path, self_module="__main__")
+    finally:
+        if previous is _MISSING:
+            global_bindings.pop("mpt", None)
+        else:
+            global_bindings["mpt"] = previous
+
+    exec(code, sys.modules["__main__"].__dict__)
+    sys.exit(0)
+
+
+def _bootstrap(globals_):
+    if globals_ is None or globals_.get("__name__") != "__main__" or "__file__" not in globals_:
+        return
+    if getattr(sys, "_mathprint_boot_done", False):
+        return
+    setattr(sys, "_mathprint_boot_done", True)
+    _run_as_main(os.path.abspath(globals_["__file__"]), mpt)
+
+
+mpt = _load_macro()
+
+# Automatic bootstrap on import, but only for the top-level script.
+_bootstrap(_import_site_globals(sys._getframe()))
