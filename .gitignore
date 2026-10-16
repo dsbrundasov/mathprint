@@ -3,5 +3,11 @@
 
 # Keep this file and the source/test trees visible to Git.
 !.gitignore
+!__init__.py
 !mathprint.py
 !test.py
+!/typings/
+!/typings/**
+!/.vscode/
+!/.vscode/**
+!pyrightconfig.json
