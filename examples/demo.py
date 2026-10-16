@@ -1,10 +1,13 @@
+# Demo of the `mpt` macro. Requires the package to be installed, e.g.
+#     python -m pip install -e .
+#
 # Run with either:
-#     python test.py
-#     macropython test.py
+#     python examples/demo.py
+#     macropython examples/demo.py
 import os
 import sys
 
-# --- Bootstrap so that `python test.py` works under plain CPython -----------
+# --- Bootstrap so that plain `python demo.py` works -------------------------
 # mcpyrate expands macros while a source file is being compiled. Plain Python
 # compiles the main script before running any of its code, so the hook cannot be
 # installed in time from within the script itself. When we detect that mcpyrate
@@ -28,11 +31,12 @@ if SourceFileLoader.source_to_code.__module__ != "mcpyrate.importer":
 from mathprint import macros, mpt
 import sympy as sp
 
-a = sp.symbols('a_a')
+a = sp.symbols("a_a")
 
 y = 5
 z = 10
 
+# Assignment form: prints the expression with a name prefix, and binds the name.
 mpt[x := y * 7 + z]
 print("x =", x)
 
@@ -51,5 +55,3 @@ print("result =", mpt[y > (a + z) * 2])
 
 # Chained comparison.
 mpt[0 < y < (a + z) * 2]
-
-print(type(a))

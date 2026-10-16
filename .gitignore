@@ -1,13 +1,26 @@
 # Ignore everything in the repository root by default.
 /*
 
-# Keep this file and the source/test trees visible to Git.
+# Keep this file and the source/test/examples trees visible to Git.
 !.gitignore
-!__init__.py
-!mathprint.py
-!test.py
+!README.md
+!pyproject.toml
+!pyrightconfig.json
+!/src/
+!/src/**
 !/typings/
 !/typings/**
+!/tests/
+!/tests/**
+!/examples/
+!/examples/**
 !/.vscode/
 !/.vscode/**
-!pyrightconfig.json
+
+# Build and cache artifacts (these override the allowlist rules above).
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/

@@ -1,6 +1,6 @@
-"""Custom macros for pretty-printing math expressions in reports.
+"""The ``mpt`` macro: pretty-print math expressions in reports.
 
-The `mpt` macro prints an expression twice:
+``mpt`` prints an expression twice:
 
   1. once symbolically, with variable names;
   2. once with the current values of those variables substituted in.
@@ -8,6 +8,11 @@ The `mpt` macro prints an expression twice:
 Values are looked up in the scope where the expression appears (they are
 ordinary name references in the generated code), so whatever is visible at
 the use site is what gets substituted.
+
+Import the macro as a macro-import; the ``macros`` marker is mandatory for
+mcpyrate::
+
+    from mathprint import macros, mpt
 
 The macro works both as a plain expression and as an assignment::
 
@@ -26,9 +31,12 @@ For comparison expressions (``==``, ``!=``, ``<``, ``<=``, ``>``, ``>=``,
 comparison (the right and left parts), instead of substituting names inside
 the sides::
 
+    from mathprint import macros, mpt
+    import sympy as sp
+
+    a = sp.symbols("a_a")
     y = 5
     z = 10
-    a = sympy.symbols("a_a")
     mpt[y > (a + z) * 2]
 
 prints::

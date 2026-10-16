@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mathprint"
+version = "0.1.0"
+description = "An mcpyrate macro (mpt) that pretty-prints math expressions with variable values substituted."
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["macros", "mcpyrate", "pretty-print", "math", "sympy"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Code Generators",
+    "Typing :: Typed",
+]
+dependencies = [
+    "mcpyrate>=4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "sympy",
+    "pytest",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mathprint = ["py.typed", "*.pyi"]
+
+[tool.pytest.ini_options]
+# mcpyrate expands macros while a module is compiled by the import machinery.
+# pytest's assertion-rewriting import hook bypasses that, so disable rewriting
+# and let test modules go through the normal (macro-aware) import path.
+addopts = ["--assert=plain"]
+testpaths = ["tests"]
