@@ -1,0 +1,7 @@
+# Ignore everything in the repository root by default.
+/*
+
+# Keep this file and the source/test trees visible to Git.
+!.gitignore
+!mathprint.py
+!test.py
