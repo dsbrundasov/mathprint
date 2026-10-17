@@ -28,6 +28,8 @@ dev = [
 package-dir = { "" = "src" }
 py-modules = ["mathprint", "mathprint_jupyter"]
 include-package-data = true
+[tool.setuptools.data-files]
+"" = ["src/_mathprint_hook.pth"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

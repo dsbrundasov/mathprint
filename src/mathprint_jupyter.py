@@ -47,6 +47,8 @@ class _MathprintASTTransformer(ast.NodeTransformer):
         return lines
 
     def visit(self, node):
+        from mcpyrate.activate import activate
+        activate()
         import mathprint_main
         from mcpyrate.compiler import expand
 
@@ -60,7 +62,8 @@ class _MathprintASTTransformer(ast.NodeTransformer):
 
 def load_ipython_extension(ipython):
     """Install the extension. Called by ``%load_ext mathprint_jupyter``."""
-    import mcpyrate  # noqa: F401  activates mcpyrate's macro-aware import hook
+    from mcpyrate.activate import activate  # noqa: F401
+    activate()
     import mathprint_main
     from mcpyrate.core import global_bindings
 
