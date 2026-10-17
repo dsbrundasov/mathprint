@@ -105,6 +105,60 @@ python -m pip install -e ".[dev]"
 python -m pip uninstall mathprint
 ```
 
+## Алгоритм установки и удаления
+
+### Чистая установка (первый раз)
+
+```powershell
+# 1. Перейти в корень проекта
+cd D:\SyncStore\Work\Python\MathPrint
+
+# 2. Удалить старую версию (если была)
+pip uninstall mathprint -y
+
+# 3. Установить editable (рекомендуется для разработки)
+pip install -e . --no-compile
+
+# 4. Проверить
+python -c "import mathprint; print(mathprint.__file__)"
+# Должно показать: ...\src\mathprint\__init__.py
+```
+
+### Удаление
+
+```powershell
+# 1. Удалить пакет
+pip uninstall mathprint -y
+
+# 2. Если остались каталоги mathprint/ в site-packages — удалить вручную
+#    (иногда pip не удаляет из-за блокировки файлов)
+```
+
+### Переустановка (если что-то сломалось)
+
+```powershell
+# 1. Удалить
+pip uninstall mathprint -y
+
+# 2. Очистить кэш pip
+pip cache purge
+
+# 3. Переустановить
+pip install -e . --no-compile
+
+# 4. Проверить
+python -c "import mathprint; print(mathprint.__file__)"
+```
+
+### Важно
+
+- Всегда используйте `--no-compile` — mcpyrate ломает `compileall` в Python 3.14.
+- Если `from mathprint import mpt` выдаёт `ImportError: cannot import name 'macros'` — значит
+  в `site-packages` остался старый пакет `mathprint/` (из до переименования). Удалите его
+  вручную и переустановите.
+- В окружении `work` (conda) убедитесь, что `mcpyrate` установлен именно в этом окружении,
+  а не в пользовательском site-packages.
+
 ## Использование
 
 Макрос `mpt` можно подключить двумя способами.
@@ -300,7 +354,8 @@ pyproject.toml              # метаданные пакета и сборка
 README.md                   # этот файл
 pyrightconfig.json          # настройки Pyright/Pylance
 src/
-  mathprint.py              # одна строка `from mathprint import mpt` (модуль-помощник)
+  mathprint/
+    __init__.py             # одна строка `from mathprint import mpt` (модуль-помощник)
   mathprint_jupyter.py      # расширение для Jupyter/IPython
   mathprint_main/
     __init__.py             # реализация макроса mpt
