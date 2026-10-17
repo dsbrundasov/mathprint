@@ -14,3 +14,6 @@ class _Macro:
 macros: Any
 
 mpt: _Macro
+
+# Set by the Jupyter extension during cell expansion.
+_SOURCE_OVERRIDE: Any

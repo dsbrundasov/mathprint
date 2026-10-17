@@ -128,9 +128,18 @@ def test_order_preserved_with_attributes(capsys):
     mpt[y * math.floor(y) + y]
     out = capsys.readouterr().out.splitlines()
     assert out[0] == "y * math.floor(y) + y"
-    # `math` is a name too, so it is substituted by its repr, in place, in the
-    # same position it occupies in the source; the attribute `floor` is not.
-    assert out[1] == f"5 * {math}.floor(5) + 5"
+    # The name `math` refers to a module, so it is left as written (not expanded).
+    assert out[1] == "5 * math.floor(5) + 5"
+
+
+def test_module_names_not_expanded(capsys):
+    import math as mt
+
+    y = 5
+    mpt[mt.floor(y) + mt.ceil(y)]
+    out = capsys.readouterr().out.splitlines()
+    assert out[0] == "mt.floor(y) + mt.ceil(y)"
+    assert out[1] == "mt.floor(5) + mt.ceil(5)"
 
 
 # --- Phase 2: comparisons are substituted, not evaluated -------------------

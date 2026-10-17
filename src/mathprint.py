@@ -94,6 +94,10 @@ def _run_as_main(path, macro):
 def _bootstrap(globals_):
     if globals_ is None or globals_.get("__name__") != "__main__" or "__file__" not in globals_:
         return
+    # In IPython / Jupyter there is no script to re-run; the notebook extension
+    # (`mathprint_jupyter`) expands cells instead.
+    if "get_ipython" in globals_:
+        return
     if getattr(sys, "_mathprint_done", False):
         return
     setattr(sys, "_mathprint_done", True)

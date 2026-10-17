@@ -55,17 +55,39 @@ construction the i-th source occurrence, the i-th value necessarily lands in the
 i-th slot: the order of variables in the output is identical to the order in
 which they appear in the source -- regardless of the surrounding operators
 (including comparisons) and regardless of what the values are (numbers, sympy
-symbols, modules, ...). No evaluation, arithmetic, or symbolic simplification
-happens in this phase, so nothing can move around. Store-context names (e.g. a
+symbols, ...). No evaluation, arithmetic, or symbolic simplification happens in
+this phase, so nothing can move around. Store-context names (e.g. a
 comprehension target, or the target of an assignment ``mpt[name := ...]``) are
 not substituted, because they are being bound, not read.
+
+**Modules are not expanded (phase 2).** If a name refers to a module, it is left
+as written: ``mpt[math.floor(y)]`` prints ``math.floor(5)``, not
+``<module 'math' (built-in)>.floor(5)``.
 """
 
 import ast
 import copy
 import importlib.util
+import types
 
-from mcpyrate.quotes import macros, q, a, u
+from mcpyrate.quotes import macros, q, a, u, h
+
+
+def _render(name, value):
+    """Render one substituted value in phase 2.
+
+    Modules are *not* expanded: they keep the name used in the source (so
+    ``math.sqrt`` stays ``math.sqrt``, not ``<module 'math' ...>.sqrt``).
+    Everything else is substituted by ``str`` of its current value.
+    """
+    if isinstance(value, types.ModuleType):
+        return name
+    return str(value)
+
+
+def _rendered_arg(name_node):
+    """Build an AST for ``_render(<name>, <name value>)``, hygienically bound."""
+    return q[h[_render](u[name_node.id], a[name_node])]
 
 
 class _LoadNameCollector(ast.NodeVisitor):
@@ -122,6 +144,10 @@ def _escape_braces(text):
 
 
 _SOURCE_CACHE = {}
+
+# Set by the Jupyter extension (`mathprint_main.jupyter`), where the code being
+# expanded has no backing source file; see `_exact_source`.
+_SOURCE_OVERRIDE = None
 
 
 def _read_source(filename):
@@ -202,6 +228,8 @@ def mpt(expr, **kw):
 
     filename = getattr(expander, "filename", None)
     source = _read_source(filename) if filename else None
+    if source is None:
+        source = _SOURCE_OVERRIDE
 
     # Phase 1: the original expression, exactly as written at the use site.
     # Phase 2: the same source with each variable substituted in place.
@@ -230,7 +258,7 @@ def mpt(expr, **kw):
             attr="format",
             ctx=ast.Load()
         ),
-        args=names,
+        args=[_rendered_arg(name) for name in names],
         keywords=[]
     )
 

@@ -187,13 +187,61 @@ from mathprint_main import macros, mpt
 ошибкой и Pylance понимает синтаксис вызова макроса — и при `from mathprint import mpt`,
 и при `from mathprint_main import macros, mpt`.
 
+## Использование в Jupyter / IPython
+
+По умолчанию ноутбуки работают через собственный `compile()` и **не** используют хук
+mcpyrate. Поэтому `mpt[...]` из коробки не раскрывается. Для Jupyter есть расширение:
+
+```python
+%load_ext mathprint_jupyter
+```
+
+После этого можно использовать макрос так же, как в скриптах — одна строка или
+явная форма:
+
+```python
+from mathprint import mpt
+
+import math as mt
+import sympy as sp
+
+a = sp.symbols("a")
+y = 5
+z = 10
+
+mpt[x := y * 7 + z]
+x  # → 45
+
+mt.floor(z) + z  # → mt.floor(10) + 10
+```
+
+> Обратите внимание: имена модулей (*modules*) **не** расширяются — `math` остаётся
+> именем, а не `<module 'math' (built-in)>`, так что `mt.floor(y)` печатается
+> именно как `mt.floor(5)`.
+
+Чтобы отключить расширение:
+
+```python
+%unload_ext mathprint_jupyter
+```
+
+Пример полного ноутбука смотрите в [examples/demo.ipynb](examples/demo.ipynb).
+
 ## Обновление пакета
 
 ### Если установлен в editable-режиме (`pip install -e .`)
 
-Ничего делать не нужно: правьте файлы в `src/mathprint_main/` (реализация макроса) или `src/mathprint.py` (модуль-помощник) — изменения подхватятся при следующем запуске скрипта.
+Ничего делать не нужно: правьте файлы — изменения подхватятся при следующем запуске скрипта. Файлы для редактирования:
 
-Тонкости:
+| Путь | Что это |
+|------|---------|
+| `src/mathprint.py` | Модуль-помощник (одна строка) — нужен только если меняете логику бута |
+| `src/mathprint_jupyter.py` | Расширение для Jupyter/IPython |
+| `src/mathprint_main/__init__.py` | Реализация макроса mpt и три фазы рендеринга |
+| `src/mathprint_main/__init__.pyi` | Типовые заглушки |
+| `examples/demo.ipynb` | Пример ноутбука |
+
+> Tонкости:
 
 - mcpyrate кэширует результат раскрытия макросов в `__pycache__` рядом с
   исходником. Он отслеживает mtime макро-файлов и пересобирает кэш при изменении,
@@ -248,20 +296,23 @@ python -m pytest
 ## Структура проекта
 
 ```
-pyproject.toml          # метаданные пакета и сборка
-README.md               # этот файл
-pyrightconfig.json      # настройки Pyright/Pylance
+pyproject.toml              # метаданные пакета и сборка
+README.md                   # этот файл
+pyrightconfig.json          # настройки Pyright/Pylance
 src/
-  mathprint.py          # одна строка `from mathprint import mpt` (модуль-помощник)
+  mathprint.py              # одна строка `from mathprint import mpt` (модуль-помощник)
+  mathprint_jupyter.py      # расширение для Jupyter/IPython
   mathprint_main/
-    __init__.py         # реализация макроса mpt
-    __init__.pyi        # типовые заглушки (для Pylance)
-    py.typed            # маркер PEP 561
+    __init__.py             # реализация макроса mpt
+    __init__.pyi            # типовые заглушки (для Pylance)
+    py.typed                # маркер PEP 561
 typings/
   mcpyrate/
-    quotes.pyi          # заглушки для операторов q/u/a из mcpyrate.quotes
+    quotes.pyi              # заглушки для операторов q/u/a из mcpyrate.quotes
 tests/
-  test_mathprint.py     # тесты
+  test_mathprint.py         # тесты скриптов
+  test_jupyter.py           # тесты Jupyter/IPython (пропускаются, если IPython не установлен)
 examples/
-  demo.py               # пример использования (`from mathprint import mpt`)
+  demo.py                   # пример использования скрипта
+  demo.ipynb                # пример ноутбука Jupyter
 ```

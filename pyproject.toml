@@ -26,7 +26,7 @@ dev = [
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-py-modules = ["mathprint"]
+py-modules = ["mathprint", "mathprint_jupyter"]
 include-package-data = true
 
 [tool.setuptools.packages.find]
