@@ -47,8 +47,11 @@ class _MathprintASTTransformer(ast.NodeTransformer):
         return lines
 
     def visit(self, node):
-        from mcpyrate.activate import activate
-        activate()
+        try:
+            from mcpyrate.activate import activate
+            activate()
+        except ImportError:
+            pass
         import mathprint_main
         from mcpyrate.compiler import expand
 
@@ -62,8 +65,12 @@ class _MathprintASTTransformer(ast.NodeTransformer):
 
 def load_ipython_extension(ipython):
     """Install the extension. Called by ``%load_ext mathprint_jupyter``."""
-    from mcpyrate.activate import activate  # noqa: F401
-    activate()
+    try:
+        from mcpyrate.activate import activate
+        activate()
+    except ImportError:
+        pass
+    import mcpyrate  # noqa: F401
     import mathprint_main
     from mcpyrate.core import global_bindings
 

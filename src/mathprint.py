@@ -59,8 +59,11 @@ def _import_site_globals(start_frame):
 
 def _load_macro():
     """Activate mcpyrate and return the ``mpt`` macro function."""
-    from mcpyrate.activate import activate
-    activate()
+    try:
+        from mcpyrate.activate import activate
+        activate()
+    except ImportError:
+        pass
     import mcpyrate  # noqa: F401
     import mathprint_main
     return mathprint_main.mpt
