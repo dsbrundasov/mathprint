@@ -1,12 +1,12 @@
-"""One-line bootstrap for running scripts that use the ``mathprint`` macros under plain ``python``.
+"""One-line bootstrap for running scripts that use the ``mpt`` macro under plain ``python``.
 
 Put this at the top of your script::
 
-    from mathprint_boot import mpt
+    from mathprint import mpt
 
 Then use ``mpt[...]`` directly, without a separate macro-import line::
 
-    from mathprint_boot import mpt
+    from mathprint import mpt
 
     y = 5
     z = 10
@@ -17,10 +17,10 @@ The script then runs under both::
     python myscript.py
     macropython myscript.py
 
-The classic mcpyrate macro-import form keeps working, too::
+The macro implementation lives in the ``mathprint_main`` package; the classic
+mcpyrate macro-import form keeps working, too::
 
-    import mathprint_boot  # noqa: F401
-    from mathprint import macros, mpt
+    from mathprint_main import macros, mpt
 
 **Why this is needed.** mcpyrate expands macros while a source file is being
 compiled, but Python compiles the main script *before* running any of its code,
@@ -51,7 +51,7 @@ def _import_site_globals(start_frame):
     frame = start_frame
     while frame is not None:
         name = frame.f_globals.get("__name__", "")
-        if name and name != "mathprint_boot" and "importlib" not in name:
+        if name and name != "mathprint" and "importlib" not in name:
             return frame.f_globals
         frame = frame.f_back
     return None
@@ -60,8 +60,8 @@ def _import_site_globals(start_frame):
 def _load_macro():
     """Activate mcpyrate and return the ``mpt`` macro function."""
     import mcpyrate  # noqa: F401  activates the macro-aware import hook on first import
-    import mathprint
-    return mathprint.mpt
+    import mathprint_main
+    return mathprint_main.mpt
 
 
 _MISSING: Any = object()
@@ -94,9 +94,9 @@ def _run_as_main(path, macro):
 def _bootstrap(globals_):
     if globals_ is None or globals_.get("__name__") != "__main__" or "__file__" not in globals_:
         return
-    if getattr(sys, "_mathprint_boot_done", False):
+    if getattr(sys, "_mathprint_done", False):
         return
-    setattr(sys, "_mathprint_boot_done", True)
+    setattr(sys, "_mathprint_done", True)
     _run_as_main(os.path.abspath(globals_["__file__"]), mpt)
 
 

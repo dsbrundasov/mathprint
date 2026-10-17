@@ -26,14 +26,14 @@ dev = [
 
 [tool.setuptools]
 package-dir = { "" = "src" }
-py-modules = ["mathprint_boot"]
+py-modules = ["mathprint"]
 include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-mathprint = ["py.typed", "*.pyi"]
+mathprint_main = ["py.typed", "*.pyi"]
 
 [tool.pytest.ini_options]
 # mcpyrate expands macros while a module is compiled by the import machinery.

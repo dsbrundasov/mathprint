@@ -4,27 +4,37 @@
 # Run with either:
 #     python examples/demo.py
 #     macropython examples/demo.py
-from mathprint_boot import mpt  # one line: enables macros and provides `mpt`
-
+from mathprint import mpt  # one line: enables macros and provides `mpt`
 import sympy as sp
+import math as mt
 
 a = sp.symbols("a_a")
 
 y = 5
 z = 10
 
-# Assignment form: prints the expression with a name prefix, and binds the name.
+# Phase 1 is the source exactly as written; phase 2 substitutes values in place.
 mpt[x := y * 7 + z]
+print("x =", x)
+
+mpt[x := mt.sqrt(y * 7) + z**2 / ((z - 10**8) / (y**z - 12*z))]
+print("x =", x)
+
+mpt[x :=
+    mt.sqrt(y * 7 + z**2)/(
+        (z - 10**8) / (y**z - 12*z)
+    )
+]
 print("x =", x)
 
 # Bare expression, no assignment.
 mpt[(a + z) * 2]
 
-# Comparison without assignment: the numeric line shows each side's value.
+# Comparison: variables are substituted in place, order preserved (no evaluation).
 mpt[y > (a + z) * 2]
 
 # Comparison with assignment.
-mpt[k := (a + z) > 2]
+mpt[k := (a + z + 14) > 2 + 10]
 print("k =", k)
 
 # The macro evaluates to the value of the expression.
@@ -32,3 +42,6 @@ print("result =", mpt[y > (a + z) * 2])
 
 # Chained comparison.
 mpt[0 < y < (a + z) * 2]
+
+# Spacing in the source line is preserved exactly.
+mpt[  y*(z - y)+z  ]
