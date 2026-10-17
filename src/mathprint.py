@@ -57,6 +57,39 @@ def _import_site_globals(start_frame):
     return None
 
 
+def _ensure_pth_file():
+    """Ensure mcpyrate's import hook is activated at Python startup via a .pth file.
+
+    This is needed for non-editable installs where the hook isn't active by
+    default. The .pth file is placed in site-packages and processed at startup.
+    """
+    import site
+    import sys
+
+    # Determine the site-packages directory
+    site_pkgs = None
+    for p in sys.path:
+        if "site-packages" in p and os.path.isdir(p):
+            site_pkgs = p
+            break
+    if site_pkgs is None:
+        try:
+            site_pkgs = site.getsitepackages()[0]
+        except (AttributeError, IndexError):
+            return
+
+    pth_path = os.path.join(site_pkgs, "_mathprint_hook.pth")
+    pth_content = "import mcpyrate.activate; mcpyrate.activate.activate()\n"
+
+    # Write if missing or outdated
+    if not os.path.exists(pth_path):
+        try:
+            with open(pth_path, "w", encoding="utf-8") as f:
+                f.write(pth_content)
+        except OSError:
+            pass  # No write permission; user may need to install manually
+
+
 def _load_macro():
     """Activate mcpyrate and return the ``mpt`` macro function."""
     from mcpyrate.activate import activate
@@ -106,6 +139,7 @@ def _bootstrap(globals_):
     _run_as_main(os.path.abspath(globals_["__file__"]), mpt)
 
 
+_ensure_pth_file()
 mpt = _load_macro()
 
 # Automatic bootstrap on import, but only for the top-level script.
