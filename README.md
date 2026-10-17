@@ -1,176 +1,140 @@
 # mathprint
 
-Макрос `mpt` для [mcpyrate](https://github.com/Technologicat/mcpyrate), который печатает
-математическое выражение **дважды**:
+[![Python](https://img.shields.io/badge/python-%3E%3D3.9-blue)](https://www.python.org/)
+[![mcpyrate](https://img.shields.io/badge/mcpyrate-%3E%3D4.0-green)](https://github.com/Technologicat/mcpyrate)
 
-1. символьно — в точности как записано в коде, с именами переменных;
-2. с подставленными текущими значениями переменных (на месте, порядок сохраняется).
+An [mcpyrate](https://github.com/Technologicat/mcpyrate) macro `mpt` that prints a mathematical expression **twice**:
 
-Значения берутся из той области видимости, где стоит вызов, то есть подставляется
-именно то, что видно в точке использования.
+1. **Symbolically** — exactly as written in the source code (names preserved).
+2. **With values substituted** — each variable replaced in place by its current value.
 
-## Возможности
+Values are taken from the scope where the macro is used, so the substituted line
+reflects the actual runtime state.
+
+---
+
+## Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Jupyter / IPython](#jupyter--ipython)
+- [How it works (three phases)](#how-it-works-three-phases)
+- [Order guarantee](#order-guarantee)
+- [Pylance / Pyright](#pylance--pyright)
+- [Updating the package](#updating-the-package)
+- [Development](#development)
+- [Project structure](#project-structure)
+
+---
+
+## Features
 
 ```python
 from mathprint import mpt
 
 import sympy as sp
 
-a = sp.symbols("a")   # символьная переменная
+a = sp.symbols("a")   # symbolic variable
 y = 5
 z = 10
 
-# Присваивание: печатает с префиксом-именем и заводит переменную x.
+# Assignment: prints with name prefix and binds x.
 mpt[x := y * 7 + z]
 # x := y * 7 + z
 # x := 5 * 7 + 10
 
-# Выражение без присваивания.
+# Bare expression.
 mpt[(a + z) * 2]
 # (a + z) * 2
 # (a_a + 10) * 2
 
-# Сравнение: переменные подставляются НА МЕСТО, порядок не меняется.
+# Comparison: variables substituted in place, order preserved.
 mpt[y > (a + z) * 2]
 # y > (a + z) * 2
 # 5 > (a_a + 10) * 2
 ```
 
-Макрос работает в три фазы:
+- All comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, `is`, `in`, …) and
+  chained comparisons (`0 < y < z`).
+- Only **names** are substituted; functions and attributes are not evaluated.
+  Assignment targets (e.g. the name left of `:=`) are not substituted.
+- Module names are **not** expanded: `math.floor(y)` stays `math.floor(5)`, not
+  `<module 'math' (built-in)>.floor(5)`.
+- Works under both `python` and `macropython`.
 
-1. **Исходник.** Печатается выражение *в точности так, как оно записано в коде*
-   (без переформатирования, лишних пробелов и скобок).
-2. **Подстановка.** Каждая локальная переменная заменяется своим текущим
-   значением *на месте*: ничего не вычисляется и не упрощается, порядок
-   переменных сохраняется в точности (см. ниже).
-3. **Вычисление.** Само выражение вычисляется один раз и становится значением
-   макроса, поэтому его можно присвоить или напечатать:
-   `result = mpt[(a + z) * 2]`.
+---
 
-Порядок гарантируется так: подстановочная строка строится прямо из точного
-исходного текста, каждая переменная поочерёдно заменяется позиционным
-плейсхолдером (в порядке байтовых смещений в файле), а затем плейсхолдеры
-заполняются значениями этих же переменных в том же порядке. i-й плейсхолдер по
-построению — это i-е вхождение в исходнике, поэтому i-е значение всегда попадает
-на i-е место. Порядок сохраняется независимо от операторов (включая сравнения) и
-от того, что за значения (числа, sympy-символы, модули, …).
-
-- Поддерживаются все операторы сравнения (`==`, `!=`, `<`, `<=`, `>`, `>=`, `is`,
-  `in`, …) и цепочки (`0 < y < z`).
-- Подставляются только имена; функции и атрибуты не вычисляются. Цели
-  присваивания (например, имя слева от `:=`) не подставляются.
-
-## Требования
+## Requirements
 
 - Python >= 3.9
-- `mcpyrate` (устанавливается автоматически как зависимость)
-- опционально `sympy` — если хотите работать с символьными выражениями
+- `mcpyrate` (installed automatically as a dependency)
+- Optional: `sympy` for symbolic expressions
 
-## Установка
+---
 
-Откройте терминал в корне проекта (`MathPrint`) и выполните команду для того
-интерпретатора/окружения, из которого будете запускать свои скрипты.
+## Installation
 
-### Режим разработки (editable) — рекомендуется
+Open a terminal in the project root (`MathPrint`) and run for the interpreter /
+environment you will use.
 
-```powershell
-python -m pip install -e .
-```
-
-Пакет «привязывается» к этим исходникам: любые ваши правки применяются сразу,
-переустанавливать не нужно. Это лучший вариант, если вы будете менять код здесь.
-
-Если работаете в виртуальном окружении (venv/conda), сначала активируйте его,
-либо вызовите `pip` именно из него:
+### Editable mode (recommended for development)
 
 ```powershell
-D:\path\to\venv\Scripts\python -m pip install -e .
+python -m pip install -e . --no-compile
 ```
 
-### Обычная установка (копией в site-packages)
+The package is linked to these sources — edits take effect on the next run without
+reinstalling. Use this if you plan to modify the code.
+
+### Regular install (copy into site-packages)
 
 ```powershell
-python -m pip install .
+python -m pip install . --no-compile
 ```
 
-### Установка с инструментами разработки (sympy, pytest)
+### With dev tools (sympy, pytest)
 
 ```powershell
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev]" --no-compile
 ```
 
-### Удаление
+### Uninstall
 
 ```powershell
 python -m pip uninstall mathprint
 ```
 
-## Алгоритм установки и удаления
+> **Always use `--no-compile`.** mcpyrate breaks `compileall` on Python 3.14.
 
-### Чистая установка (первый раз)
+### Clean install / reinstall (if something broke)
 
 ```powershell
-# 1. Перейти в корень проекта
-cd D:\SyncStore\Work\Python\MathPrint
-
-# 2. Удалить старую версию (если была)
-pip uninstall mathprint -y
-
-# 3. Установить editable (рекомендуется для разработки)
-pip install -e . --no-compile
-
-# 4. Проверить
+python -m pip uninstall mathprint -y
+python -m pip cache purge
+python -m pip install -e . --no-compile
 python -c "import mathprint; print(mathprint.__file__)"
-# Должно показать: ...\src\mathprint\__init__.py
+# Expected: ...\src\mathprint\__init__.py
 ```
 
-### Удаление
+> **Troubleshooting.** If `from mathprint import mpt` raises
+> `ImportError: cannot import name 'macros'`, a stale `mathprint/` package
+> (from before the rename) is left in `site-packages`. Close all Python/Jupyter/
+> VS Code processes and delete that directory manually, then reinstall.
 
-```powershell
-# 1. Удалить пакет
-pip uninstall mathprint -y
+---
 
-# 2. Если остались каталоги mathprint/ в site-packages — удалить вручную
-#    (иногда pip не удаляет из-за блокировки файлов)
-```
+## Usage
 
-### Переустановка (если что-то сломалось)
-
-```powershell
-# 1. Удалить
-pip uninstall mathprint -y
-
-# 2. Очистить кэш pip
-pip cache purge
-
-# 3. Переустановить
-pip install -e . --no-compile
-
-# 4. Проверить
-python -c "import mathprint; print(mathprint.__file__)"
-```
-
-### Важно
-
-- Всегда используйте `--no-compile` — mcpyrate ломает `compileall` в Python 3.14.
-- Если `from mathprint import mpt` выдаёт `ImportError: cannot import name 'macros'` — значит
-  в `site-packages` остался старый пакет `mathprint/` (из до переименования). Удалите его
-  вручную и переустановите.
-- В окружении `work` (conda) убедитесь, что `mcpyrate` установлен именно в этом окружении,
-  а не в пользовательском site-packages.
-
-## Использование
-
-Макрос `mpt` можно подключить двумя способами.
-
-### Вариант A — одна строка (рекомендуется)
+### Option A — one line (recommended)
 
 ```python
 from mathprint import mpt
 ```
 
-Модуль `mathprint` — это модуль-помощник, который ставится вместе с пакетом.
-После такого импорта `mpt[...]` сразу доступен:
+`mathprint` is a helper module shipped with the package. After this import,
+`mpt[...]` is available immediately:
 
 ```python
 from mathprint import mpt
@@ -180,78 +144,66 @@ z = 10
 mpt[x := y * 7 + z]
 ```
 
-Такой скрипт запускается и обычным `python`, и через `macropython` — см. ниже.
-Копировать в файл никакой «bootstrap»-блок не нужно.
+This works under both `python` and `macropython` — no bootstrap block needed.
 
-Реализация самого макроса лежит в отдельном пакете `mathprint_main`. Модуль
-`mathprint` при импорте регистрирует `mpt` как глобальный макрос mcpyrate (на
-время компиляции скрипта) и при необходимости перезапускает файл — поэтому
-`from mathprint import mpt` и есть подключение макроса.
+The macro implementation lives in the separate `mathprint_main` package;
+`mathprint` registers `mpt` as a global mcpyrate macro at compile time and,
+when needed, re-compiles and re-runs the script with macro expansion enabled.
 
-### Вариант B — явная форма mcpyrate
-
-Если предпочитаете «канонический» макро-импорт mcpyrate, он тоже работает:
+### Option B — explicit mcpyrate form
 
 ```python
 from mathprint_main import macros, mpt
 ```
 
-Здесь макро-импорт **обязан** начинаться со служебного имени `macros` — так
-требует mcpyrate. Имя `macros` — маркер; фактически из пакета вы получаете только
-`mpt`. Импортировать макрос напрямую `from mathprint_main import mpt` (без
-`macros`) нельзя: такой импорт не будет распознан как макро-импорт, и `mpt[...]`
-упадёт во время выполнения с `'function' object is not subscriptable`. Именно для
-этого и нужен вариант A.
+The macro-import **must** start with the `macros` marker name — that is
+mcpyrate's requirement. `macros` is a marker; you effectively get only `mpt`.
+Importing `from mathprint_main import mpt` (without `macros`) will **not** be
+recognized as a macro-import and `mpt[...]` will fail at runtime with
+`'function' object is not subscriptable`. That is exactly what Option A avoids.
 
-### Как запускать скрипт с макросом
+### Running a script with macros
 
-Макросы раскрываются во время компиляции. Python компилирует главный скрипт
-**до** выполнения его кода, поэтому обычный `python myscript.py` сам по себе
-хук не включит. Варианты:
+Macros are expanded at compile time. Python compiles the main script **before**
+running any of its code, so the macro hook is not installed in time from within
+the script itself. Two options:
 
-1. **Через macropython** (без правок скрипта):
-
+1. **Via macropython** (no script changes):
    ```powershell
    macropython myscript.py
-   ```
-
-   или, если консольная команда недоступна:
-
-   ```powershell
+   # or, if the console command is unavailable:
    python -m mcpyrate.repl.macropython myscript.py
    ```
 
-2. **Обычным `python myscript.py`** — достаточно, чтобы первой строкой скрипта
-   был `from mathprint import mpt` (вариант A).
+2. **Plain `python myscript.py`** — put `from mathprint import mpt` as the
+   **first line** of the script (Option A). The boot module activates the hook and
+   re-runs the file with macros expanded. Under `macropython` (or on the re-run)
+   it does nothing, so the import is always safe.
 
-   Модуль `mathprint` при импорте проверяет, активен ли mcpyrate, и при
-   необходимости перекомпилирует и перезапускает скрипт уже с включённым
-   раскрытием макросов. Под `macropython` (и при повторном запуске) он ничего
-   лишнего не делает.
+   Place this import before any other top-level side effects, because the first
+   (plain) run stops at the import and re-runs the file.
 
-   Важно: ставьте этот импорт **самой первой строкой**, до любого другого кода,
-   потому что при обычном запуске файл исполняется дважды (второй раз — уже с
-   раскрытыми макросами).
-
-Вариант A работает и под `python`, и под `macropython`.
+Option A works under both `python` and `macropython`.
 
 ### Pylance / Pyright
 
-Пакет поставляет `py.typed` и `__init__.pyi`, поэтому `mpt[...]` не подсвечивается
-ошибкой и Pylance понимает синтаксис вызова макроса — и при `from mathprint import mpt`,
-и при `from mathprint_main import macros, mpt`.
+The package ships `py.typed` and `__init__.pyi`, so `mpt[...]` is not flagged as
+an error and Pylance understands the macro-call syntax — both with
+`from mathprint import mpt` and `from mathprint_main import macros, mpt`.
 
-## Использование в Jupyter / IPython
+---
 
-По умолчанию ноутбуки работают через собственный `compile()` и **не** используют хук
-mcpyrate. Поэтому `mpt[...]` из коробки не раскрывается. Для Jupyter есть расширение:
+## Jupyter / IPython
+
+Notebook cells are compiled directly by IPython and do **not** go through
+mcpyrate's import hook, so `mpt[...]` is not expanded by default. A Jupyter
+extension is provided:
 
 ```python
 %load_ext mathprint_jupyter
 ```
 
-После этого можно использовать макрос так же, как в скриптах — одна строка или
-явная форма:
+After that, use `mpt` in any cell just like in scripts:
 
 ```python
 from mathprint import mpt
@@ -269,105 +221,354 @@ x  # → 45
 mt.floor(z) + z  # → mt.floor(10) + 10
 ```
 
-> Обратите внимание: имена модулей (*modules*) **не** расширяются — `math` остаётся
-> именем, а не `<module 'math' (built-in)>`, так что `mt.floor(y)` печатается
-> именно как `mt.floor(5)`.
+> Module names are **not** expanded: `math` stays a name, not
+> `<module 'math' (built-in)>`, so `mt.floor(y)` prints as `mt.floor(5)`.
 
-Чтобы отключить расширение:
+Unload with:
 
 ```python
 %unload_ext mathprint_jupyter
 ```
 
-Пример полного ноутбука смотрите в [examples/demo.ipynb](examples/demo.ipynb).
+A complete example notebook is in [examples/demo.ipynb](examples/demo.ipynb).
 
-## Обновление пакета
+---
 
-### Если установлен в editable-режиме (`pip install -e .`)
+## How it works (three phases)
 
-Ничего делать не нужно: правьте файлы — изменения подхватятся при следующем запуске скрипта. Файлы для редактирования:
+`mpt` renders an expression in three phases:
 
-| Путь | Что это |
-|------|---------|
-| `src/mathprint.py` | Модуль-помощник (одна строка) — нужен только если меняете логику бута |
-| `src/mathprint_jupyter.py` | Расширение для Jupyter/IPython |
-| `src/mathprint_main/__init__.py` | Реализация макроса mpt и три фазы рендеринга |
-| `src/mathprint_main/__init__.pyi` | Типовые заглушки |
-| `examples/demo.ipynb` | Пример ноутбука |
+1. **Source.** The expression *exactly as written at the use site*, taken
+   verbatim from the source file (no reformatting, no added/removed spaces or
+   parentheses).
+2. **Substitution.** The same expression with each local variable replaced
+   *in place* by its current value. Nothing is evaluated or simplified here; only
+   names are textually substituted, and their order is preserved exactly.
+3. **Evaluation.** The expression itself is evaluated once and becomes the value
+   of the macro, so it can be assigned or printed:
+   `result = mpt[(a + z) * 2]`.
 
-> Tонкости:
+---
 
-- mcpyrate кэширует результат раскрытия макросов в `__pycache__` рядом с
-  исходником. Он отслеживает mtime макро-файлов и пересобирает кэш при изменении,
-  но если кажется, что используется старая версия — удалите кэш и перезапустите
-  Python:
+## Order guarantee
 
+The substituted line is built directly from the exact source substring of the
+expression. Each *loaded* name occurrence is replaced in place by a positional
+`str.format` placeholder, and occurrences are collected in source order (by byte
+offset in the file), then sorted by that offset. Placeholders are filled
+positionally with the values of those very same occurrences. Because the i-th
+placeholder is by construction the i-th source occurrence, the i-th value
+necessarily lands in the i-th slot — regardless of the surrounding operators
+(including comparisons) and regardless of what the values are (numbers, sympy
+symbols, modules, …). No evaluation, arithmetic, or symbolic simplification
+happens in this phase, so nothing can move around.
+
+Store-context names (e.g. a comprehension target, or the target of an assignment
+`mpt[name := …]`) are not substituted, because they are being bound, not read.
+
+---
+
+## Pylance / Pyright
+
+The package ships `py.typed` and `__init__.pyi`, so `mpt[...]` is not flagged as
+an error and Pylance understands the macro-call syntax — both with
+`from mathprint import mpt` and `from mathprint_main import macros, mpt`.
+
+---
+
+## Updating the package
+
+### Editable mode (`pip install -e .`)
+
+No action needed — edit files in `src/` and changes take effect on the next run.
+
+Notes:
+- mcpyrate caches macro-expansion results in `__pycache__` next to the source.
+  It tracks mtime of macro files and rebuilds on change, but if a stale version
+  seems to be used, clear the cache and restart Python:
   ```powershell
   Remove-Item -Recurse -Force src\mathprint_main\__pycache__
   ```
+- Macro code changes only take effect in a **new** Python process.
 
-- Изменения кода макроса вступают в силу только в **новом** процессе Python
-  (или в новом запуске скрипта).
+### Regular install (`pip install .`)
 
-### Если установлена обычная копия (`pip install .`)
-
-Изменения в исходниках **не** попадут в установленный пакет автоматически,
-поэтому после правок переустановите:
+Source edits do **not** reach the installed copy automatically. Reinstall after
+changes:
 
 ```powershell
-python -m pip install --force-reinstall .
+python -m pip install --force-reinstall . --no-compile
 ```
 
-Либо поднимите `version` в `pyproject.toml` (например, `0.1.0` → `0.1.1`) и
-выполните `python -m pip install .`.
+Or bump `version` in `pyproject.toml` (e.g. `0.1.0` → `0.1.1`) and run
+`python -m pip install . --no-compile`.
 
-> Совет: если планируете часто менять код — используйте editable-режим, он избавляет
-> от переустановки.
+> Tip: use editable mode if you change code often — it avoids reinstalling.
 
-### Несколько окружений
+### Multiple environments
 
-Пакет ставится в конкретное окружение. Если используете venv/conda, ставьте и
-обновляйте его тем же интерпретатором, из которого запускаете скрипты:
+The package is installed into a specific environment. With venv/conda, install and
+update it with the same interpreter you run scripts with:
 
 ```powershell
-D:\path\to\venv\Scripts\python -m pip install -e .
+D:\path\to\venv\Scripts\python -m pip install -e . --no-compile
 ```
 
-## Разработка
+---
+
+## Development
 
 ```powershell
-# Демонстрационный скрипт (нужна установка пакета)
+# Demo script (package must be installed)
 python examples/demo.py
 
-# Тесты
+# Tests
 python -m pytest
 ```
 
-Тесты запускаются с `--assert=plain` (см. `[tool.pytest.ini_options]` в
-`pyproject.toml`), потому что перезапись assert-ов в pytest обходит хук
-раскрытия макросов mcpyrate.
+Tests run with `--assert=plain` (see `[tool.pytest.ini_options]` in
+`pyproject.toml`), because pytest's assertion rewriting bypasses mcpyrate's
+macro-expansion hook.
 
-## Структура проекта
+---
+
+## Project structure
 
 ```
-pyproject.toml              # метаданные пакета и сборка
+pyproject.toml              # package metadata and build config
+README.md                   # this file
+pyrightconfig.json          # Pyright/Pylance settings
+src/
+  mathprint/                # helper module (one-liner bootstrap)
+    __init__.py
+  mathprint_jupyter.py      # Jupyter/IPython extension
+  mathprint_main/           # macro implementation
+    __init__.py
+    __init__.pyi            # type stubs (for Pylance)
+    py.typed                # PEP 561 marker
+typings/
+  mcpyrate/
+    quotes.pyi              # stubs for q/u/a operators from mcpyrate.quotes
+tests/
+  test_mathprint.py         # script tests
+  test_jupyter.py           # Jupyter/IPython tests (skipped if IPython missing)
+examples/
+  demo.py                   # script example (`from mathprint import mpt`)
+  demo.ipynb                # Jupyter notebook example
+```
+
+---
+
+## Русский
+
+### Возможности
+
+Макрос `mpt` для [mcpyrate](https://github.com/Technologicat/mcpyrate), который
+печатает математическое выражение **дважды**:
+
+1. **Символьно** — в точности как записано в коде, с именами переменных.
+2. **С подставленными значениями** — каждая переменная заменяется своим текущим
+   значением на месте.
+
+Значения берутся из той области видимости, где стоит вызов.
+
+```python
+from mathprint import mpt
+
+import sympy as sp
+
+a = sp.symbols("a")   # символьная переменная
+y = 5
+z = 10
+
+mpt[x := y * 7 + z]
+# x := y * 7 + z
+# x := 5 * 7 + 10
+
+mpt[(a + z) * 2]
+# (a + z) * 2
+# (a_a + 10) * 2
+
+mpt[y > (a + z) * 2]
+# y > (a + z) * 2
+# 5 > (a_a + 10) * 2
+```
+
+- Все операторы сравнения (`==`, `!=`, `<`, `<=`, `>`, `>=`, `is`, `in`, …)
+  и цепочки (`0 < y < z`).
+- Подставляются только **имена**; функции и атрибуты не вычисляются. Цели
+  присваивания (имя слева от `:=`) не подставляются.
+- Имена модулей **не** расширяются: `math.floor(y)` остаётся `math.floor(5)`.
+- Работает и под `python`, и под `macropython`.
+
+### Требования
+
+- Python >= 3.9
+- `mcpyrate` (устанавливается автоматически)
+- Опционально `sympy` для символьных выражений
+
+### Установка
+
+Откройте терминал в корне проекта (`MathPrint`) и выполните команду для того
+интерпретатора/окружения, из которого будете запускать скрипты.
+
+**Editable (рекомендуется для разработки):**
+```powershell
+python -m pip install -e . --no-compile
+```
+
+**Обычная (копией в site-packages):**
+```powershell
+python -m pip install . --no-compile
+```
+
+**С инструментами разработки (sympy, pytest):**
+```powershell
+python -m pip install -e ".[dev]" --no-compile
+```
+
+**Удаление:**
+```powershell
+python -m pip uninstall mathprint
+```
+
+> Всегда используйте `--no-compile` — mcpyrate ломает `compileall` в Python 3.14.
+
+**Если что-то сломалось:**
+```powershell
+python -m pip uninstall mathprint -y
+python -m pip cache purge
+python -m pip install -e . --no-compile
+python -c "import mathprint; print(mathprint.__file__)"
+# Ожидается: ...\src\mathprint\__init__.py
+```
+
+> Если `from mathprint import mpt` выдаёт `ImportError: cannot import name 'macros'` —
+> в `site-packages` остался старый пакет `mathprint/` (из до переименования).
+> Закройте все процессы Python/Jupyter/VS Code и удалите каталог вручную.
+
+### Использование
+
+**Вариант A — одна строка (рекомендуется):**
+```python
+from mathprint import mpt
+```
+
+После этого `mpt[...]` сразу доступен:
+```python
+from mathprint import mpt
+
+y = 5
+z = 10
+mpt[x := y * 7 + z]
+```
+
+Работает и под `python`, и под `macropython`.
+
+**Вариант B — явная форма mcpyrate:**
+```python
+from mathprint_main import macros, mpt
+```
+
+Макро-импорт **обязан** начинаться со служебного имени `macros` — так требует
+mcpyrate. Импортировать `from mathprint_main import mpt` без `macros` нельзя.
+
+**Запуск скрипта с макросом:**
+1. Через `macropython`: `macropython myscript.py`
+2. Обычным `python myscript.py` — поставьте `from mathprint import mpt` первой строкой.
+
+Важно: этот импорт должен идти **до** любого другого кода, потому что при обычном
+запуске файл исполняется дважды.
+
+### Jupyter / IPython
+
+Ноутбуки по умолчанию не используют хук mcpyrate. Для Jupyter есть расширение:
+
+```python
+%load_ext mathprint_jupyter
+```
+
+После этого используйте макрос так же, как в скриптах:
+
+```python
+from mathprint import mpt
+
+import math as mt
+import sympy as sp
+
+a = sp.symbols("a")
+y = 5
+z = 10
+
+mpt[x := y * 7 + z]
+x  # → 45
+
+mt.floor(z) + z  # → mt.floor(10) + 10
+```
+
+Отключить расширение: `%unload_ext mathprint_jupyter`
+
+Пример ноутбука: [examples/demo.ipynb](examples/demo.ipynb).
+
+### Как это работает (три фазы)
+
+1. **Исходник.** Выражение *в точности так, как записано в коде*.
+2. **Подстановка.** Каждая переменная заменяется своим значением *на месте*.
+   Ничего не вычисляется; порядок сохраняется.
+3. **Вычисление.** Выражение вычисляется один раз: `result = mpt[(a + z) * 2]`.
+
+### Гарантия порядка
+
+Подстановочная строка строится прямо из точного исходного текста. Каждое
+вхождение имени заменяется позиционным плейсхолдером (по байтовому смещению в
+файле), затем плейсхолдеры заполняются значениями тех же переменных в том же
+порядке. i-й плейсхолдер по построению — это i-е вхождение в исходнике, поэтому
+i-е значение всегда попадает на i-е место — независимо от операторов (включая
+сравнения) и от того, что за значения (числа, sympy-символы, модули, …).
+
+### Pylance / Pyright
+
+Пакет поставляет `py.typed` и `__init__.pyi`, поэтому `mpt[...]` не
+подсвечивается ошибкой.
+
+### Обновление пакета
+
+**Editable (`pip install -e .`):** правьте файлы в `src/` — изменения подхватятся
+при следующем запуске. mcpyrate кэширует результат в `__pycache__`; при
+подозрении на устаревший кэш удалите его и перезапустите Python.
+
+**Обычная (`pip install .`):** изменения в исходниках не попадут автоматически.
+Переустановите: `python -m pip install --force-reinstall . --no-compile`
+
+### Разработка
+
+```powershell
+python examples/demo.py   # демо-скрипт
+python -m pytest          # тесты (--assert=plain в pyproject.toml)
+```
+
+### Структура проекта
+
+```
+pyproject.toml              # метаданные пакета
 README.md                   # этот файл
 pyrightconfig.json          # настройки Pyright/Pylance
 src/
-  mathprint/
-    __init__.py             # одна строка `from mathprint import mpt` (модуль-помощник)
+  mathprint/                # модуль-помощник (one-liner bootstrap)
+    __init__.py
   mathprint_jupyter.py      # расширение для Jupyter/IPython
-  mathprint_main/
-    __init__.py             # реализация макроса mpt
-    __init__.pyi            # типовые заглушки (для Pylance)
+  mathprint_main/           # реализация макроса mpt
+    __init__.py
+    __init__.pyi            # типовые заглушки
     py.typed                # маркер PEP 561
 typings/
   mcpyrate/
-    quotes.pyi              # заглушки для операторов q/u/a из mcpyrate.quotes
+    quotes.pyi              # заглушки для q/u/a из mcpyrate.quotes
 tests/
   test_mathprint.py         # тесты скриптов
-  test_jupyter.py           # тесты Jupyter/IPython (пропускаются, если IPython не установлен)
+  test_jupyter.py           # тесты Jupyter (пропускаются без IPython)
 examples/
-  demo.py                   # пример использования скрипта
-  demo.ipynb                # пример ноутбука Jupyter
+  demo.py                   # пример скрипта
+  demo.ipynb                # пример ноутбука
 ```
+"D:\\SyncStore\\Work\\Python\\MathPrint\\README.md"
