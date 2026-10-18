@@ -21,9 +21,7 @@ Import the macro with the one-line bootstrap::
     from mathprint import mpt
 
 That single import works under plain ``python myscript.py``, under
-``macropython``, and in Jupyter (via the ``mathprint_jupyter`` extension); it
-registers ``mpt`` as a global mcpyrate macro, so it also works in imported
-modules.
+``macropython``, and in Jupyter (via the ``mathprint_jupyter`` extension).
 
 The macro works both as a plain expression and as an assignment::
 
@@ -74,14 +72,22 @@ converted with ``pytexit.py2tex`` and shown via ``IPython.display``, the
 ``display(Latex(py2tex(...)))`` recipe. ``mpt.latex(False)`` switches back. The
 switch is per file (or per notebook in Jupyter), and nothing here imports
 ``pytexit`` unless LaTeX mode is actually used.
+
+**Display precision (opt-in, per file).** Calling ``mpt.precision(n)`` rounds the
+numbers *shown* by phases 2 and 3 to ``n`` significant digits (``3.123123412``
+prints as ``3.123`` for ``n=4``). This affects only the display: the expression
+is still evaluated, and the macro's return value is unrounded. ``mpt.precision()``
+(or ``mpt.precision(None)``) restores the default.
 """
 
 import ast
 import copy
+import decimal
 import importlib.util
 import os
 import sys
 import types
+from fractions import Fraction
 
 from mcpyrate.quotes import macros, q, a, u, h
 
@@ -98,16 +104,23 @@ _OPAQUE_TYPES = (
 )
 
 
-def _render(name, value):
+def _render(key, name, value):
     """Render one substituted value in phase 2.
 
     Modules, functions, methods, built-ins and classes are *not* expanded: they
     keep the name used in the source (so ``math.sqrt`` stays ``math.sqrt``, ``f``
     stays ``f``, ``int`` stays ``int``), instead of dumping an opaque ``<…>``
-    repr. Everything else is substituted by ``str`` of its current value.
+    repr. Everything else is substituted by ``str`` of its current value, except
+    plain numbers when the file has opted into ``mpt.precision(n)``: those are
+    shown rounded to ``n`` significant digits.
     """
     if isinstance(value, _OPAQUE_TYPES):
         return name
+    precision = _precision_for(key)
+    if precision is not None:
+        text = _format_number(value, precision)
+        if text is not None:
+            return text
     return str(value)
 
 
@@ -140,8 +153,8 @@ def _latex_enabled(key):
     return _ANY_FILE in _LATEX_FILES or key in _LATEX_FILES
 
 
-def _latex_key_for_globals(globals_):
-    """Scope key for a live module/cell's globals (backing ``mpt.latex()``)."""
+def _scope_key(globals_):
+    """Scope key for a live module/cell's globals (backs ``mpt.latex()`` etc.)."""
     if not globals_:
         return _ANY_FILE
     path = globals_.get("__file__")
@@ -159,12 +172,98 @@ def _set_latex(enabled=True):
     notebook, in Jupyter) to LaTeX output; ``mpt.latex(False)`` switches it back
     to plain text. Returns the scope key that was affected.
     """
-    key = _latex_key_for_globals(sys._getframe(1).f_globals)
+    key = _scope_key(sys._getframe(1).f_globals)
     if enabled:
         _LATEX_FILES.add(key)
     else:
         _LATEX_FILES.discard(key)
     return key
+
+
+# --- Display precision for numbers (opt-in, per file) ----------------------
+
+# `mpt.precision(n)` rounds the numbers *shown* by phases 2 and 3 to `n`
+# significant digits. It only affects the display: the expression is still
+# evaluated with full precision, and the macro's return value is unrounded.
+# Like the LaTeX switch, it is scoped to the file (or notebook) where it is
+# called, so it never leaks into other modules.
+_PRECISION_FILES = {}
+
+
+def _set_precision(digits=None):
+    """Back the ``mpt.precision()`` switch: set displayed significant digits.
+
+    ``mpt.precision(n)`` shows numbers in the calling file (or notebook) rounded
+    to ``n`` significant digits; ``mpt.precision(None)`` restores the default
+    (full ``str`` of the value). Returns the scope key that was affected.
+    """
+    key = _scope_key(sys._getframe(1).f_globals)
+    if digits is None:
+        _PRECISION_FILES.pop(key, None)
+    else:
+        digits = int(digits)
+        if digits < 1:
+            raise ValueError("mpt.precision needs a positive number of significant digits")
+        _PRECISION_FILES[key] = digits
+    return key
+
+
+def _precision_for(key):
+    """Number of significant digits to show for `key`, or `None` for the default."""
+    return _PRECISION_FILES.get(key)
+
+
+def _format_number(value, precision):
+    """Format `value` with `precision` significant digits, or return `None`.
+
+    Only plain numbers are formatted (``int``, ``float``, ``complex``,
+    ``Decimal``, ``Fraction`` and subclasses such as numpy floats); everything
+    else -- including ``bool`` and symbolic (e.g. sympy) objects -- returns
+    `None`, so the caller falls back to ``str``. Trailing zeros are dropped
+    (``23.00134`` -> ``"23"``, ``2.50`` -> ``"2.5"``); there is no padding.
+    """
+    if isinstance(value, bool):
+        return None
+    if not isinstance(value, (int, float, complex, decimal.Decimal, Fraction)):
+        return None
+    if isinstance(value, complex):
+        real = _format_real(value.real, precision)
+        imag = _format_real(abs(value.imag), precision)
+        if value.imag == 0:
+            return real
+        return f"{real}{'-' if value.imag < 0 else '+'}{imag}j"
+    return _format_real(value, precision)
+
+
+def _to_decimal(value):
+    """Lossless-ish conversion of a plain number to `decimal.Decimal`."""
+    if isinstance(value, decimal.Decimal):
+        return value
+    if isinstance(value, Fraction):
+        return decimal.Decimal(value.numerator) / decimal.Decimal(value.denominator)
+    if isinstance(value, int):
+        return decimal.Decimal(value)
+    # float subclass (e.g. numpy.float64): `float` normalizes repr quirks.
+    return decimal.Decimal(repr(float(value)))
+
+
+def _format_real(value, precision):
+    """Format a real number with `precision` significant digits."""
+    with decimal.localcontext() as ctx:
+        ctx.prec = max(28, precision + 10)
+        number = _to_decimal(value)
+        if number == 0:
+            return "0"
+        exponent = number.adjusted()
+        quantum = decimal.Decimal(1).scaleb(exponent - precision + 1)
+        try:
+            rounded = number.quantize(quantum, rounding=decimal.ROUND_HALF_EVEN)
+        except decimal.InvalidOperation:
+            return str(value)
+        text = format(rounded, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
 
 
 def _emit(key, text):
@@ -182,9 +281,13 @@ def _print_value(key, prefix, value):
     bare expression), so the value line matches phases 1 and 2 (e.g.
     ``g_m_diff := 12``). Used instead of ``(print(expr), expr)`` so that the
     expression is evaluated exactly once while still being printed. In LaTeX
-    mode the line is rendered with ``_display_latex`` instead of printed.
+    mode the line is rendered with ``_display_latex`` instead of printed. When
+    the file has opted into ``mpt.precision(n)`` the *printed* number is rounded
+    to ``n`` significant digits; the returned value keeps full precision.
     """
-    line = f"{prefix}{value}"
+    precision = _precision_for(key)
+    shown = _format_number(value, precision) if precision is not None else None
+    line = f"{prefix}{value if shown is None else shown}"
     if _latex_enabled(key):
         _display_latex(line)
     else:
@@ -260,9 +363,9 @@ def _fix_pytexit_constants():
     visitor.visit_Constant = visit_Constant
 
 
-def _rendered_arg(name_node):
-    """Build an AST for ``_render(<name>, <name value>)``, hygienically bound."""
-    return q[h[_render](u[name_node.id], a[name_node])]
+def _rendered_arg(key, name_node):
+    """Build an AST for ``_render(<key>, <name>, <name value>)``, hygienically bound."""
+    return q[h[_render](u[key], u[name_node.id], a[name_node])]
 
 
 class _LoadNameCollector(ast.NodeVisitor):
@@ -406,6 +509,9 @@ def mpt(expr, **kw):
     if source is None:
         source = _SOURCE_OVERRIDE
 
+    # The compile-time source file, used to scope `mpt.latex()` / `mpt.precision()`.
+    key = _latex_key(filename)
+
     # Phase 1: the original expression, exactly as written at the use site.
     # Phase 2: the same source with each variable substituted in place.
     symbolic = None
@@ -433,7 +539,7 @@ def mpt(expr, **kw):
             attr="format",
             ctx=ast.Load()
         ),
-        args=[_rendered_arg(name) for name in names],
+        args=[_rendered_arg(key, name) for name in names],
         keywords=[]
     )
 
@@ -442,9 +548,8 @@ def mpt(expr, **kw):
     # `name := ` prefix in the assignment form, so the value line matches phases
     # 1 and 2), yielding the value. `_print_value` prints and returns it, so the
     # expression is not evaluated twice. When the file opts into LaTeX output
-    # (`mpt.latex()`), `_emit`/`_print_value` render each line instead of
-    # printing it; `key` is the compile-time source file the calls belong to.
-    key = _latex_key(filename)
+    # (`mpt.latex()`) or a display precision (`mpt.precision(n)`), the emitters
+    # render each line accordingly; `key` is the source file of these calls.
     return q[(
             h[_emit](u[key], u[symbolic]),
             h[_emit](u[key], a[numeric]),
@@ -453,9 +558,11 @@ def mpt(expr, **kw):
     ]
 
 
-# `mpt.latex()` switches the calling file (or notebook) to LaTeX output. It is
-# attached here as an attribute of the macro function so it is available
+# `mpt.latex()` switches the calling file (or notebook) to LaTeX output, and
+# `mpt.precision(n)` sets the displayed significant digits for it. They are
+# attached here as attributes of the macro function so they are available
 # wherever `mpt` itself is (e.g. `from mathprint import mpt` in a script or a
-# Jupyter cell). `mpt.latex(False)` switches back to plain text. (`setattr`, so
-# the type checker, which sees `mpt` as a plain function, stays happy.)
+# Jupyter cell). (`setattr`, so the type checker, which sees `mpt` as a plain
+# function, stays happy.)
 setattr(mpt, "latex", _set_latex)
+setattr(mpt, "precision", _set_precision)

@@ -26,21 +26,22 @@ def _run(shell, code):
 def shell():
     ip = InteractiveShell.instance()
     load_ipython_extension(ip)
-    _clear_latex()
+    _clear_scopes()
     try:
         yield ip
     finally:
         unload_ipython_extension(ip)
-        _clear_latex()
-        for name in ("a", "b", "c", "k", "mt", "x", "y", "z"):
+        _clear_scopes()
+        for name in ("a", "b", "c", "k", "mt", "r", "v", "x", "y", "z"):
             ip.user_ns.pop(name, None)
 
 
-def _clear_latex():
+def _clear_scopes():
     import mathprint_main
 
     mathprint_main._LATEX_FILES.discard("<ipython>")
     mathprint_main._LATEX_FILES.discard(mathprint_main._ANY_FILE)
+    mathprint_main._PRECISION_FILES.pop("<ipython>", None)
 
 
 def test_one_liner_in_cell(shell):
@@ -82,3 +83,20 @@ def test_latex_mode_in_cell(shell):
     assert "x := y+z" not in out
     assert mathprint_main._latex_enabled("<ipython>")
     assert shell.user_ns["x"] == 15
+
+
+def test_precision_mode_in_cell(shell):
+    import mathprint_main
+
+    result, out = _run(
+        shell,
+        "from mathprint import mpt\n"
+        "mpt.precision(4)\n"
+        "v = 3.123123412\n"
+        "mpt[v + 0]\n",
+    )
+    assert result.success, result.error_in_exec
+    assert "3.123 + 0" in out          # displayed with 4 significant digits
+    assert "3.123123412 + 0" not in out
+    assert mathprint_main._precision_for("<ipython>") == 4
+    assert shell.user_ns["v"] == 3.123123412

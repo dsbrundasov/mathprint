@@ -22,6 +22,11 @@ cell (it applies to the rest of the notebook)::
 
     mpt.latex()
 
+To show numbers with a fixed number of significant digits, call
+``mpt.precision(n)``::
+
+    mpt.precision(4)
+
 Unload with::
 
     %unload_ext mathprint_jupyter

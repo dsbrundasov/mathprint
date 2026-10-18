@@ -23,6 +23,7 @@ printed value and the macro's return value come from that single evaluation.
 - [Usage](#usage)
 - [Jupyter / IPython](#jupyter--ipython)
 - [LaTeX output](#latex-output)
+- [Display precision](#display-precision)
 - [Disabling mathprint (no-op stub)](#disabling-mathprint-no-op-stub)
 - [How it works (three phases)](#how-it-works-three-phases)
 - [Order guarantee](#order-guarantee)
@@ -76,6 +77,9 @@ mpt[y > (a + z) * 2]
 - Optional **LaTeX output** (Jupyter): call `mpt.latex()` to render the three
   lines as LaTeX via `pytexit` + `IPython.display`, per file. Plain text stays
   the default. See [LaTeX output](#latex-output).
+- Optional **display precision**: `mpt.precision(n)` shows numbers with `n`
+  significant digits, per file, without affecting the computed value. See
+  [Display precision](#display-precision).
 
 ---
 
@@ -147,9 +151,7 @@ Use a single import line:
 from mathprint import mpt
 ```
 
-`mathprint` is a small helper module shipped with the package; the macro
-implementation lives in the internal `mathprint_main` package. After this import,
-`mpt[...]` is available immediately:
+After this import, `mpt[...]` is available immediately:
 
 ```python
 from mathprint import mpt
@@ -159,9 +161,10 @@ z = 10
 mpt[x := y * 7 + z]
 ```
 
-Importing `mathprint` registers `mpt` as a global mcpyrate macro, so the same
-line works everywhere: plain `python`, `macropython`, imported modules, and
-Jupyter cells.
+`mathprint` is a small helper module shipped with the package; the macro
+implementation lives in the internal `mathprint_main` package. The import
+activates mcpyrate and, for a top-level script, re-runs it with `mpt` registered
+as a macro.
 
 ### Running a script with macros
 
@@ -274,6 +277,43 @@ frontend (Jupyter); outside IPython, `display` falls back to a plain repr.
 
 A complete example notebook is in
 [examples/demo_latex.ipynb](examples/demo_latex.ipynb).
+
+---
+
+## Display precision
+
+By default each number is printed with its full `str` value. To cap the
+**displayed** digits, call `mpt.precision(n)` — numbers are then shown rounded to
+`n` significant digits:
+
+```python
+from mathprint import mpt
+mpt.precision(4)
+
+v = 3.123123412
+mpt[v + 0]
+# v + 0
+# 3.123 + 0
+# 3.123
+
+w = 23.00134
+mpt[w * 1]
+# w * 1
+# 23 * 1
+# 23
+```
+
+This affects **only the display**: the expression is still evaluated with full
+precision, and `mpt[...]` returns the unrounded value (`r` above would still be
+`6.246246824` for `mpt[r := v * 2]`).
+
+It applies to plain numbers — `int`, `float`, `complex`, `Decimal`, `Fraction`
+and numpy scalars. Symbolic values (e.g. sympy expressions), modules, functions
+and classes are shown as usual. Trailing zeros are not padded (`23.00134` prints
+as `23`, not `23.00`).
+
+The setting is scoped to the file (or notebook) where `mpt.precision(n)` is
+called. `mpt.precision()` (or `mpt.precision(None)`) restores the default.
 
 ---
 
@@ -431,6 +471,7 @@ tests/
   test_jupyter.py           # Jupyter/IPython tests (skipped if IPython missing)
   test_stub.py              # no-op stub tests
   test_latex.py             # LaTeX output mode tests
+  test_precision.py         # display precision tests
 examples/
   demo.py                   # script example (`from mathprint import mpt`)
   demo_stub.py              # script example (stub, prints nothing)
