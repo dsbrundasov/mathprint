@@ -26,6 +26,7 @@ printed value and the macro's return value come from that single evaluation.
 - [Usage](#usage)
 - [Several expressions in one call](#several-expressions-in-one-call)
 - [Jupyter / IPython](#jupyter--ipython)
+- [Layout: one line or a column](#layout-one-line-or-a-column)
 - [LaTeX output](#latex-output)
 - [Display precision](#display-precision)
 - [Disabling mathprint (no-op stub)](#disabling-mathprint-no-op-stub)
@@ -82,6 +83,10 @@ mpt[y > (a + z) * 2]
   `math.floor(5)` (not `<module 'math' …>.floor(5)`), `f(y)` stays `f(5)` (not
   `<function f at 0x…>(5)`), and `int(y)` stays `int(5)` (not `<class 'int'>(5)`).
 - Works under both `python` and `macropython`.
+- Optional **one-line layout**: `mpt.to_line()` joins the three phases into a
+  single line — `x = 3 + y = 3 + 5 = 8` — per file. A column of lines is the
+  default; `mpt.to_column()` switches back. See
+  [Layout: one line or a column](#layout-one-line-or-a-column).
 - Optional **LaTeX output** (Jupyter): call `mpt.latex()` to render the three
   lines as LaTeX via `pytexit` + `IPython.display`, per file. Plain text stays
   the default. See [LaTeX output](#latex-output).
@@ -296,6 +301,43 @@ Unload with:
 ```
 
 A complete example notebook is in [examples/demo.ipynb](examples/demo.ipynb).
+
+---
+
+## Layout: one line or a column
+
+By default the three phases are a **column** — one line each. To join them into a
+single line — the name appearing once — call `mpt.to_line()`:
+
+```python
+from mathprint import mpt
+
+mpt.to_line()
+y = 5
+mpt[x := 3 + y]
+# x = 3 + y = 3 + 5 = 8
+
+mpt[3 + y]
+# 3 + y = 3 + 5 = 8
+```
+
+The phases are joined with ` = `; the source and the substitution keep their
+exact spelling (parentheses included). `mpt.to_column()` restores the default
+column. Both switches affect the file (or notebook) they are called in and return
+the scope key that changed.
+
+With `mpt.latex()` also active, a one-line result is joined with `==` so `pytexit`
+renders it as a chain of `=`:
+
+```python
+mpt.to_line()
+mpt.latex()
+mpt[x := 3 + y]
+# LaTeX:  x = 3 + y = 3 + 5 = 8
+```
+
+The layout combines with the other per-file settings (`mpt.latex()`,
+`mpt.precision(n)`).
 
 ---
 
@@ -537,6 +579,7 @@ tests/
   test_stub.py              # no-op stub tests
   test_latex.py             # LaTeX output mode tests
   test_precision.py         # display precision tests
+  test_layout.py            # one-line / column layout tests
 examples/
   demo.py                   # script example (`from mathprint import mpt`)
   demo_stub.py              # script example (stub, prints nothing)

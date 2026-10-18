@@ -89,22 +89,30 @@ prints as ``3.123`` for ``n=4``). This affects only the display: the expression
 is still evaluated, and the macro's return value is unrounded. ``mpt.precision()``
 (or ``mpt.precision(None)``) restores the default.
 
+**Layout (opt-in, per file).** Output is a *column* by default: the source, the
+substitution and the value, each on its own line. ``mpt.to_line()`` switches the
+calling file to a single *line* instead, the name appearing once::
+
+    mpt.to_line()
+    mpt[x := 3 + y]     # prints:  x = 3 + y = 3 + 5 = 8
+
+``mpt.to_column()`` switches back.
+
 **How the code is laid out.** The work is a short pipeline of single-purpose
 classes, in reading order:
 
   * :class:`Numbers` -- round a plain number to ``n`` significant digits.
   * :class:`Latex` -- render one line as LaTeX (optional, imported lazily).
-  * :class:`Printer` -- show the three lines; owns the per-scope settings
-    (plain text vs LaTeX, full vs fixed precision) and the phase-2 rule that
-    modules/functions/classes keep their names.
+  * :class:`Printer` -- show the output; owns the per-scope settings (column vs
+    one line, plain text vs LaTeX, full vs fixed precision) and the phase-2 rule
+    that modules/functions/classes keep their names.
   * :class:`Source` -- the exact text of the expression being printed.
   * :class:`Expander` -- the macro itself: turn one ``mpt[...]`` into the
     three-phase form, and sequence several expressions.
 
 ``mpt`` is a one-line wrapper over :class:`Expander`. The expanded code calls
-back into the class methods: ``Printer.render``, ``Printer.line``,
-``Printer.show_value`` (the three phases) and ``Expander.collect`` (the
-multi-expression form).
+back into the class methods: ``Printer.render`` (one substituted name) and
+``Printer.show`` (all three phases, laid out, value returned).
 """
 
 import ast
@@ -266,24 +274,29 @@ class Latex:
 # ---------------------------------------------------------------------------
 
 class Printer:
-    """Show the three lines of an ``mpt`` call, per *scope*.
+    """Show the output of an ``mpt`` call, per *scope*.
 
     A scope is a file (keyed by its absolute path), a notebook (``"<ipython>"``)
     or the "no file" case (:attr:`ANY_FILE`). Each scope independently picks:
 
+    * the layout -- a column of lines (default), or one line
+      (``mpt.to_line()`` / ``mpt.to_column()``),
     * the format -- plain text (default) or LaTeX (``mpt.latex()``), and
     * the display precision -- full, or ``n`` significant digits
       (``mpt.precision(n)``).
 
-    So the two settings never leak between files. The settings live in
+    So the settings never leak between files. They live in :attr:`line_scopes`,
     :attr:`latex_scopes` and :attr:`precision_scopes`; the ``key_of*`` methods
-    map a file or a live module to a scope key; and :meth:`render`,
-    :meth:`line` and :meth:`show_value` are the runtime hooks the expanded code
-    calls (see :class:`Expander`).
+    map a file or a live module to a scope key; and :meth:`render`, :meth:`text`,
+    :meth:`emit` and :meth:`show` are the runtime hooks the expanded code calls
+    (see :class:`Expander`).
     """
 
     #: Scope key meaning "every file" (used when no filename is known).
     ANY_FILE = "*"
+
+    #: Scope keys shown on a single line (see ``mpt.to_line()``); others columns.
+    line_scopes = set()
 
     #: Scope keys that opted into LaTeX output (see ``mpt.latex()``).
     latex_scopes = set()
@@ -325,7 +338,16 @@ class Printer:
             return "<ipython>"
         return cls.ANY_FILE
 
-    # --- the two display switches (back `mpt.latex` / `mpt.precision`) ------
+    # --- the display switches (back `mpt.to_line` / `.latex` / `.precision`) -
+
+    @classmethod
+    def set_line(cls, key, on=True):
+        """Enable (or disable) one-line layout for `key`; return `key`."""
+        if on:
+            cls.line_scopes.add(key)
+        else:
+            cls.line_scopes.discard(key)
+        return key
 
     @classmethod
     def set_latex(cls, key, enabled=True):
@@ -349,6 +371,11 @@ class Printer:
         return key
 
     @classmethod
+    def line_on(cls, key):
+        """Whether `key` (or every file, via ``ANY_FILE``) uses one-line layout."""
+        return cls.ANY_FILE in cls.line_scopes or key in cls.line_scopes
+
+    @classmethod
     def latex_on(cls, key):
         """Whether `key` (or every file, via ``ANY_FILE``) uses LaTeX output."""
         return cls.ANY_FILE in cls.latex_scopes or key in cls.latex_scopes
@@ -358,7 +385,7 @@ class Printer:
         """Significant digits to show for `key`, or ``None`` for the default."""
         return cls.precision_scopes.get(key)
 
-    # --- the three runtime hooks (called by the expanded code) --------------
+    # --- the runtime hooks (called by the expanded code) --------------------
 
     @classmethod
     def render(cls, key, name, value):
@@ -367,44 +394,54 @@ class Printer:
         Modules, functions, methods, built-ins and classes are *not* expanded:
         they keep the name used in the source (so ``math.sqrt`` stays
         ``math.sqrt``, ``f`` stays ``f``, ``int`` stays ``int``) instead of
-        dumping an opaque ``<…>`` repr. Everything else is substituted by
-        ``str`` of its value, except plain numbers in a scope that opted into
-        ``mpt.precision(n)``: those are shown rounded to ``n`` significant
-        digits.
+        dumping an opaque ``<…>`` repr. Everything else is shown by
+        :meth:`text`.
         """
         if isinstance(value, cls.OPAQUE_TYPES):
             return name
-        shown = cls.number(key, value)
-        return str(value) if shown is None else shown
+        return cls.text(key, value)
 
     @classmethod
-    def line(cls, key, text):
-        """Phase 1/2: show one source/substitution line."""
+    def text(cls, key, value):
+        """`value` as shown (``str``, with the scope's precision applied)."""
+        digits = cls.precision_of(key)
+        if digits is not None:
+            shown = Numbers.format(value, digits)
+            if shown is not None:
+                return shown
+        return str(value)
+
+    @classmethod
+    def emit(cls, key, text):
+        """Show one line: as LaTeX, or printed."""
         if cls.latex_on(key):
             Latex.show(text)
         else:
             print(text)
 
     @classmethod
-    def show_value(cls, key, prefix, value):
-        """Phase 3: show the value line (with the assignment prefix) and return it.
+    def show(cls, key, name, source, substituted, value):
+        """Show the whole call -- source, substitution and value -- and return it.
 
-        Used instead of ``(print(value), value)`` so the expression is evaluated
-        exactly once while still being shown. ``prefix`` is the ``name := ``
-        prefix of the assignment form (empty for a bare expression), so the
-        value line matches phases 1 and 2.
+        In a *column* (the default) the three are separate lines, each carrying
+        the ``name := `` prefix of the assignment form. On *one line* they are
+        joined (``x = 3 + y = 3 + 5 = 8``), the name appearing once. ``name`` is
+        the assignment target (``""`` for a bare expression) and ``source`` /
+        ``substituted`` already contain the name, so the joined line just drops
+        it (everything up to the first ``:=``).
         """
-        shown = cls.number(key, value)
-        cls.line(key, f"{prefix}{value if shown is None else shown}")
+        shown = cls.text(key, value)
+        if cls.line_on(key):
+            if name:
+                source = source.split(":=", 1)[1].strip()
+                substituted = substituted.split(":=", 1)[1].strip()
+            joiner = " == " if cls.latex_on(key) else " = "
+            cls.emit(key, joiner.join(([name] if name else []) + [source, substituted, shown]))
+        else:
+            cls.emit(key, source)
+            cls.emit(key, substituted)
+            cls.emit(key, f"{name} := {shown}" if name else shown)
         return value
-
-    @classmethod
-    def number(cls, key, value):
-        """`value` rounded to the scope's precision, or ``None`` (default: ``str``)."""
-        digits = cls.precision_of(key)
-        if digits is None:
-            return None
-        return Numbers.format(value, digits)
 
 
 # ---------------------------------------------------------------------------
@@ -459,61 +496,37 @@ class Source:
         Every loaded name occurrence inside `segment` becomes a positional
         ``{}`` placeholder; `names` lists those occurrences in source order.
         """
-        collector = self._NameCollector()
-        collector.visit(node)
-
         start = self._offset(node.lineno, node.col_offset)
-        segment_bytes = segment.encode("utf-8")
-
-        spans = []
-        for name in collector.names:
-            s = self._offset(name.lineno, name.col_offset) - start
-            e = self._offset(name.end_lineno, name.end_col_offset) - start
-            spans.append((s, e, name))
-        spans.sort(key=lambda span: span[0])
+        raw = segment.encode("utf-8")
+        spans = sorted(
+            (self._offset(n.lineno, n.col_offset) - start,
+             self._offset(n.end_lineno, n.end_col_offset) - start,
+             n)
+            for n in ast.walk(node)
+            if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+        )
 
         pieces = []
         names = []
         cursor = 0
         for s, e, name in spans:
-            if s < cursor:  # pragma: no cover - impossible for well-formed expressions
-                raise MacroExpansionError("mpt: overlapping names in the expression")
-            pieces.append(self._escape_braces(segment_bytes[cursor:s].decode("utf-8")))
+            pieces.append(self._escape_braces(raw[cursor:s].decode("utf-8")))
             pieces.append("{}")
             names.append(name)
             cursor = e
-        pieces.append(self._escape_braces(segment_bytes[cursor:].decode("utf-8")))
+        pieces.append(self._escape_braces(raw[cursor:].decode("utf-8")))
         return "".join(pieces), names
 
     def _offset(self, lineno, col_offset):
         """Absolute UTF-8 byte offset of `(lineno, col_offset)` in the source."""
-        lines = self._splitlines_no_ff(self.text)
+        lines = self.text.replace("\f", "").splitlines(True)
         base = sum(len(line.encode("utf-8")) for line in lines[:lineno - 1])
         return base + col_offset
-
-    @staticmethod
-    def _splitlines_no_ff(text):
-        """Split lines, dropping form feeds, exactly like `ast.get_source_segment`."""
-        idx = text.find("\f")
-        while idx != -1:
-            text = text[:idx] + text[idx + 1:]
-            idx = text.find("\f", idx)
-        return text.splitlines(True)
 
     @staticmethod
     def _escape_braces(text):
         """Escape literal braces so `str.format` treats them as literal text."""
         return text.replace("{", "{{").replace("}", "}}")
-
-    class _NameCollector(ast.NodeVisitor):
-        """Collect loaded `Name` nodes in AST (source) order."""
-
-        def __init__(self):
-            self.names = []
-
-        def visit_Name(self, node):
-            if isinstance(node.ctx, ast.Load):
-                self.names.append(node)
 
 
 # ---------------------------------------------------------------------------
@@ -544,43 +557,34 @@ class Expander:
         return self._item(expr)
 
     def _item(self, expr):
-        """Expand a single item into its three-phase sequence."""
+        """Expand a single item into its runtime ``Printer.show`` call."""
         key = self.key
 
-        # Assignment form `mpt[name := expression]`; anything else (including a
-        # bare expression such as `mpt[(a + z) * 2]`) has no name prefix.
+        # Assignment form `mpt[name := expression]` carries the name; anything
+        # else (including a bare expression such as `mpt[(a + z) * 2]`) has none.
         if type(expr) is ast.NamedExpr and type(expr.target) is ast.Name:
-            prefix = f"{expr.target.id} := "
+            name = expr.target.id
         else:
-            prefix = ""
+            name = ""
 
-        # Phase 1: the expression exactly as written at the use site.
-        symbolic = self.source.segment(expr)
-
-        # Phase 2: that same text with each loaded name replaced, in place, by a
-        # positional placeholder; `template` returns the placeholder string and
-        # the name nodes those placeholders stand for.
-        template, names = self.source.template(symbolic, expr)
-
-        numeric = ast.Call(func=ast.Attribute(
+        # Phase 1 is the expression exactly as written at the use site; phase 2
+        # is that same text with each loaded name replaced, in place, by that
+        # name's value (a `str.format` template plus one argument per name).
+        source = self.source.segment(expr)
+        template, names = self.source.template(source, expr)
+        substituted = ast.Call(func=ast.Attribute(
                 value=ast.Constant(template),
                 attr="format",
                 ctx=ast.Load()
             ),
-            args=[self._rendered_arg(key, name) for name in names],
+            args=[self._rendered_arg(key, node) for node in names],
             keywords=[]
         )
 
-        # Phase 3: runs left to right -- show the source line, show the
-        # substituted line, then evaluate the original expression once and show
-        # its value (with the `name := ` prefix in the assignment form, so the
-        # value line matches phases 1 and 2), yielding the value.
-        return q[(
-                h[Printer].line(u[key], u[symbolic]),
-                h[Printer].line(u[key], a[numeric]),
-                h[Printer].show_value(u[key], u[prefix], a[expr])
-            )[-1]
-        ]
+        # `show` prints the source, the substitution and (phase 3) the value, and
+        # returns the value. The arguments are evaluated left to right, so the
+        # substitution is built from the *old* values before `expr` runs.
+        return q[h[Printer].show(u[key], u[name], u[source], a[substituted], a[expr])]
 
     @staticmethod
     def _rendered_arg(key, name_node):
@@ -613,6 +617,18 @@ def mpt(expr, **kw):
     return Expander(kw.get("expander")).expand(expr)
 
 
+def _to_line():
+    """Back ``mpt.to_line()``: show the calling file's output on one line."""
+    key = Printer.key_of_globals(sys._getframe(1).f_globals)
+    return Printer.set_line(key, True)
+
+
+def _to_column():
+    """Back ``mpt.to_column()``: show the calling file's output as a column (default)."""
+    key = Printer.key_of_globals(sys._getframe(1).f_globals)
+    return Printer.set_line(key, False)
+
+
 def _set_latex(enabled=True):
     """Back the ``mpt.latex()`` switch: enable/disable LaTeX for the calling file.
 
@@ -635,11 +651,13 @@ def _set_precision(digits=None):
     return Printer.set_precision(key, digits)
 
 
-# `mpt.latex()` switches the calling file (or notebook) to LaTeX output, and
-# `mpt.precision(n)` sets the displayed significant digits for it. They are
-# attached here as attributes of the macro function so they are available
-# wherever `mpt` itself is (e.g. `from mathprint import mpt` in a script or a
-# Jupyter cell). (`setattr`, so the type checker, which sees `mpt` as a plain
-# function, stays happy.)
+# `mpt.to_line()` / `mpt.to_column()` choose the layout, `mpt.latex()` the format
+# (LaTeX) and `mpt.precision(n)` the displayed significant digits -- each for the
+# file (or notebook) it is called in. They are attached here as attributes of the
+# macro function so they are available wherever `mpt` itself is (e.g.
+# `from mathprint import mpt`). (`setattr`, so the type checker, which sees `mpt`
+# as a plain function, stays happy.)
+setattr(mpt, "to_line", _to_line)
+setattr(mpt, "to_column", _to_column)
 setattr(mpt, "latex", _set_latex)
 setattr(mpt, "precision", _set_precision)

@@ -3,6 +3,7 @@
 
 # Keep this file and the source/test/examples trees visible to Git.
 !.gitignore
+!AGENTS.md
 !README.md
 !pyproject.toml
 !pyrightconfig.json
