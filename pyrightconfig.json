@@ -1,5 +1,5 @@
 {
   "stubPath": "typings",
   "extraPaths": ["src"],
-  "exclude": ["**/__pycache__"]
+  "exclude": ["**/__pycache__", "build", "dist"]
 }

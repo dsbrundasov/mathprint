@@ -17,11 +17,11 @@ _HERE = os.path.abspath(__file__)
 @pytest.fixture(autouse=True)
 def restore_precision():
     """Keep precision state isolated per test."""
-    saved = dict(mathprint_main._PRECISION_FILES)
-    mathprint_main._PRECISION_FILES.clear()
+    saved = dict(mathprint_main.Printer.precision_scopes)
+    mathprint_main.Printer.precision_scopes.clear()
     yield
-    mathprint_main._PRECISION_FILES.clear()
-    mathprint_main._PRECISION_FILES.update(saved)
+    mathprint_main.Printer.precision_scopes.clear()
+    mathprint_main.Printer.precision_scopes.update(saved)
 
 
 # --- The formatter ---------------------------------------------------------
@@ -40,38 +40,38 @@ def restore_precision():
     (3.14159265, 8, "3.1415926"),
 ])
 def test_format_number(value, precision, expected):
-    assert mathprint_main._format_number(value, precision) == expected
+    assert mathprint_main.Numbers.format(value, precision) == expected
 
 
 def test_format_number_ignores_bools_and_non_numbers():
-    assert mathprint_main._format_number(True, 4) is None
-    assert mathprint_main._format_number("text", 4) is None
-    assert mathprint_main._format_number((1, 2), 4) is None
+    assert mathprint_main.Numbers.format(True, 4) is None
+    assert mathprint_main.Numbers.format("text", 4) is None
+    assert mathprint_main.Numbers.format((1, 2), 4) is None
 
 
 def test_format_number_ignores_symbolic():
     sp = pytest.importorskip("sympy")
-    assert mathprint_main._format_number(sp.Integer(5) + sp.Integer(3), 4) is None
+    assert mathprint_main.Numbers.format(sp.Integer(5) + sp.Integer(3), 4) is None
 
 
 def test_format_number_handles_complex():
-    assert mathprint_main._format_number(1.234567 + 2.345678j, 4) == "1.235+2.346j"
-    assert mathprint_main._format_number(1.234567 - 2.345678j, 4) == "1.235-2.346j"
+    assert mathprint_main.Numbers.format(1.234567 + 2.345678j, 4) == "1.235+2.346j"
+    assert mathprint_main.Numbers.format(1.234567 - 2.345678j, 4) == "1.235-2.346j"
 
 
 # --- The `mpt.precision()` switch ------------------------------------------
 
 def test_precision_switch_enable_reset():
     assert mpt.precision(4) == _HERE
-    assert mathprint_main._precision_for(_HERE) == 4
+    assert mathprint_main.Printer.precision_of(_HERE) == 4
     assert mpt.precision(None) == _HERE
-    assert mathprint_main._precision_for(_HERE) is None
+    assert mathprint_main.Printer.precision_of(_HERE) is None
 
 
 def test_precision_scoped_to_calling_file():
     mpt.precision(4)
-    assert mathprint_main._precision_for(_HERE) == 4
-    assert mathprint_main._precision_for(os.path.abspath("other.py")) is None
+    assert mathprint_main.Printer.precision_of(_HERE) == 4
+    assert mathprint_main.Printer.precision_of(os.path.abspath("other.py")) is None
 
 
 def test_precision_rejects_non_positive():

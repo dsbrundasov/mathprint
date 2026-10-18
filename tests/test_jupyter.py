@@ -39,9 +39,9 @@ def shell():
 def _clear_scopes():
     import mathprint_main
 
-    mathprint_main._LATEX_FILES.discard("<ipython>")
-    mathprint_main._LATEX_FILES.discard(mathprint_main._ANY_FILE)
-    mathprint_main._PRECISION_FILES.pop("<ipython>", None)
+    mathprint_main.Printer.latex_scopes.discard("<ipython>")
+    mathprint_main.Printer.latex_scopes.discard(mathprint_main.Printer.ANY_FILE)
+    mathprint_main.Printer.precision_scopes.pop("<ipython>", None)
 
 
 def test_one_liner_in_cell(shell):
@@ -81,7 +81,7 @@ def test_latex_mode_in_cell(shell):
     assert result.success, result.error_in_exec
     # The file/notebook opted in, so plain text is no longer printed.
     assert "x := y+z" not in out
-    assert mathprint_main._latex_enabled("<ipython>")
+    assert mathprint_main.Printer.latex_on("<ipython>")
     assert shell.user_ns["x"] == 15
 
 
@@ -98,7 +98,7 @@ def test_precision_mode_in_cell(shell):
     assert result.success, result.error_in_exec
     assert "3.123 + 0" in out          # displayed with 4 significant digits
     assert "3.123123412 + 0" not in out
-    assert mathprint_main._precision_for("<ipython>") == 4
+    assert mathprint_main.Printer.precision_of("<ipython>") == 4
     assert shell.user_ns["v"] == 3.123123412
 
 

@@ -61,12 +61,12 @@ class _MathprintASTTransformer(ast.NodeTransformer):
         import mathprint_main
         from mcpyrate.compiler import expand
 
-        previous = mathprint_main._SOURCE_OVERRIDE
-        mathprint_main._SOURCE_OVERRIDE = self.source
+        previous = mathprint_main.Source.override
+        mathprint_main.Source.override = self.source
         try:
             return expand(node, filename="<ipython>", self_module=None)
         finally:
-            mathprint_main._SOURCE_OVERRIDE = previous
+            mathprint_main.Source.override = previous
 
 
 def load_ipython_extension(ipython):
