@@ -16,15 +16,14 @@
      phases 1 and 2), and that value becomes the value of the whole macro call
      (so it can be assigned or printed).
 
-Import the macro as a macro-import; the ``macros`` marker is mandatory for
-mcpyrate::
-
-    from mathprint_main import macros, mpt
-
-For plain ``python myscript.py`` (no ``macropython``) use the one-line bootstrap
-instead, which also provides the macro without the ``macros`` marker::
+Import the macro with the one-line bootstrap::
 
     from mathprint import mpt
+
+That single import works under plain ``python myscript.py``, under
+``macropython``, and in Jupyter (via the ``mathprint_jupyter`` extension); it
+registers ``mpt`` as a global mcpyrate macro, so it also works in imported
+modules.
 
 The macro works both as a plain expression and as an assignment::
 
@@ -69,17 +68,19 @@ to a module, function, method, built-in or class, it is left as written:
 ``mpt[f(y)]`` prints ``f(5)`` (not ``<function f at 0x…>(5)``), and
 ``mpt[int(y)]`` prints ``int(5)`` (not ``<class 'int'>(5)``).
 
-**LaTeX output (opt-in, per file).** Output is plain text by default. Importing
-``mathprint.latex`` at the top of a file switches *that file* to LaTeX: each line
-is converted with ``pytexit.py2tex`` and shown via ``IPython.display``, the
-``display(Latex(py2tex(...)))`` recipe. Importing it elsewhere has no effect on
-this file, and nothing here imports ``pytexit`` unless LaTeX mode is used.
+**LaTeX output (opt-in, per file).** Output is plain text by default. Calling
+``mpt.latex()`` switches *the file where the call appears* to LaTeX: each line is
+converted with ``pytexit.py2tex`` and shown via ``IPython.display``, the
+``display(Latex(py2tex(...)))`` recipe. ``mpt.latex(False)`` switches back. The
+switch is per file (or per notebook in Jupyter), and nothing here imports
+``pytexit`` unless LaTeX mode is actually used.
 """
 
 import ast
 import copy
 import importlib.util
 import os
+import sys
 import types
 
 from mcpyrate.quotes import macros, q, a, u, h
@@ -112,14 +113,14 @@ def _render(name, value):
 
 # --- Output mode: plain text (default) or LaTeX ----------------------------
 
-# `mpt` prints plain text by default. Importing `mathprint.latex` (or calling
-# `mathprint.latex.enable()`) switches the *file where it is imported* to LaTeX
-# output: each printed line is converted with `pytexit.py2tex` and shown via
-# `IPython.display`, the classic `display(Latex(py2tex(...)))` recipe.
+# `mpt` prints plain text by default. Calling `mpt.latex()` switches the *file
+# where it is called* to LaTeX output: each printed line is converted with
+# `pytexit.py2tex` and shown via `IPython.display`, the classic
+# `display(Latex(py2tex(...)))` recipe.
 #
 # The set holds normalized scope keys (`_latex_key`). The virtual `_ANY_FILE`
 # key switches *every* file (used when no source file can be determined, e.g. in
-# `python -c`). Because keys are per-file, importing `mathprint.latex` never
+# `python -c`). Because keys are per-file, `mpt.latex()` in one module never
 # leaks into other modules.
 _ANY_FILE = "*"
 _LATEX_FILES = set()
@@ -137,6 +138,33 @@ def _latex_key(filename):
 def _latex_enabled(key):
     """Return whether `key` (or every file, via `_ANY_FILE`) uses LaTeX output."""
     return _ANY_FILE in _LATEX_FILES or key in _LATEX_FILES
+
+
+def _latex_key_for_globals(globals_):
+    """Scope key for a live module/cell's globals (backing ``mpt.latex()``)."""
+    if not globals_:
+        return _ANY_FILE
+    path = globals_.get("__file__")
+    if path:
+        return _latex_key(path)
+    if "get_ipython" in globals_:
+        return "<ipython>"
+    return _ANY_FILE
+
+
+def _set_latex(enabled=True):
+    """Back the ``mpt.latex()`` switch: enable/disable LaTeX for the calling file.
+
+    ``mpt.latex()`` switches the file where the call appears (or the whole
+    notebook, in Jupyter) to LaTeX output; ``mpt.latex(False)`` switches it back
+    to plain text. Returns the scope key that was affected.
+    """
+    key = _latex_key_for_globals(sys._getframe(1).f_globals)
+    if enabled:
+        _LATEX_FILES.add(key)
+    else:
+        _LATEX_FILES.discard(key)
+    return key
 
 
 def _emit(key, text):
@@ -414,7 +442,7 @@ def mpt(expr, **kw):
     # `name := ` prefix in the assignment form, so the value line matches phases
     # 1 and 2), yielding the value. `_print_value` prints and returns it, so the
     # expression is not evaluated twice. When the file opts into LaTeX output
-    # (`mathprint.latex`), `_emit`/`_print_value` render each line instead of
+    # (`mpt.latex()`), `_emit`/`_print_value` render each line instead of
     # printing it; `key` is the compile-time source file the calls belong to.
     key = _latex_key(filename)
     return q[(
@@ -423,3 +451,11 @@ def mpt(expr, **kw):
             h[_print_value](u[key], u[prefix], a[expr])
         )[-1]
     ]
+
+
+# `mpt.latex()` switches the calling file (or notebook) to LaTeX output. It is
+# attached here as an attribute of the macro function so it is available
+# wherever `mpt` itself is (e.g. `from mathprint import mpt` in a script or a
+# Jupyter cell). `mpt.latex(False)` switches back to plain text. (`setattr`, so
+# the type checker, which sees `mpt` as a plain function, stays happy.)
+setattr(mpt, "latex", _set_latex)

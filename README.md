@@ -73,7 +73,7 @@ mpt[y > (a + z) * 2]
   `math.floor(5)` (not `<module 'math' …>.floor(5)`), `f(y)` stays `f(5)` (not
   `<function f at 0x…>(5)`), and `int(y)` stays `int(5)` (not `<class 'int'>(5)`).
 - Works under both `python` and `macropython`.
-- Optional **LaTeX output** (Jupyter): `import mathprint.latex` renders the three
+- Optional **LaTeX output** (Jupyter): call `mpt.latex()` to render the three
   lines as LaTeX via `pytexit` + `IPython.display`, per file. Plain text stays
   the default. See [LaTeX output](#latex-output).
 
@@ -141,13 +141,14 @@ python -c "import mathprint; print(mathprint.__file__)"
 
 ## Usage
 
-### Option A — one line (recommended)
+Use a single import line:
 
 ```python
 from mathprint import mpt
 ```
 
-`mathprint` is a helper module shipped with the package. After this import,
+`mathprint` is a small helper module shipped with the package; the macro
+implementation lives in the internal `mathprint_main` package. After this import,
 `mpt[...]` is available immediately:
 
 ```python
@@ -158,23 +159,9 @@ z = 10
 mpt[x := y * 7 + z]
 ```
 
-This works under both `python` and `macropython` — no bootstrap block needed.
-
-The macro implementation lives in the separate `mathprint_main` package;
-`mathprint` registers `mpt` as a global mcpyrate macro at compile time and,
-when needed, re-compiles and re-runs the script with macro expansion enabled.
-
-### Option B — explicit mcpyrate form
-
-```python
-from mathprint_main import macros, mpt
-```
-
-The macro-import **must** start with the `macros` marker name — that is
-mcpyrate's requirement. `macros` is a marker; you effectively get only `mpt`.
-Importing `from mathprint_main import mpt` (without `macros`) will **not** be
-recognized as a macro-import and `mpt[...]` will fail at runtime with
-`'function' object is not subscriptable`. That is exactly what Option A avoids.
+Importing `mathprint` registers `mpt` as a global mcpyrate macro, so the same
+line works everywhere: plain `python`, `macropython`, imported modules, and
+Jupyter cells.
 
 ### Running a script with macros
 
@@ -190,20 +177,19 @@ the script itself. Two options:
    ```
 
 2. **Plain `python myscript.py`** — put `from mathprint import mpt` as the
-   **first line** of the script (Option A). The boot module activates the hook and
-   re-runs the file with macros expanded. Under `macropython` (or on the re-run)
-   it does nothing, so the import is always safe.
+   **first line** of the script. The helper activates the hook and re-runs the
+   file with macros expanded. Under `macropython` (or on the re-run) it does
+   nothing, so the import is always safe.
 
    Place this import before any other top-level side effects, because the first
    (plain) run stops at the import and re-runs the file.
 
-Option A works under both `python` and `macropython`.
+Both ways work; pick whichever fits.
 
 ### Pylance / Pyright
 
 The package ships `py.typed` and `__init__.pyi`, so `mpt[...]` is not flagged as
-an error and Pylance understands the macro-call syntax — both with
-`from mathprint import mpt` and `from mathprint_main import macros, mpt`.
+an error and Pylance understands the macro-call syntax.
 
 ---
 
@@ -254,29 +240,23 @@ A complete example notebook is in [examples/demo.ipynb](examples/demo.ipynb).
 ## LaTeX output
 
 Output is **plain text by default**. To render the three lines as LaTeX — like
-`display(Latex(py2tex(...)))` — import `mathprint.latex` at the top of the file:
+`display(Latex(py2tex(...)))` — call `mpt.latex()` once in the file:
 
 ```python
+%load_ext mathprint_jupyter        # Jupyter / IPython only
+
 from mathprint import mpt
-import mathprint.latex          # <- this file now renders LaTeX
+mpt.latex()                        # <- this file now renders LaTeX
 
 y = 5
 z = 10
 mpt[x := y * 7 + z]
 ```
 
-The switch is scoped to the file that imports it (in a notebook, to the whole
-notebook), so importing it here never affects other modules. Toggle it
-explicitly if you prefer:
-
-```python
-import mathprint.latex as mpl
-
-mpl.enable()                     # enable for the calling file
-mpl.enable("/path/to/file.py")   # or target a specific file
-mpl.disable()                    # back to plain text
-mpl.is_enabled()                 # current state
-```
+`mpt.latex()` switches the file it appears in (in a notebook, the whole
+notebook); other modules are unaffected. `mpt.latex(False)` moves that file back
+to plain text. Both forms return the scope key that changed (the file path, or
+`<ipython>` in a notebook).
 
 Requires `pytexit` and `IPython`:
 
@@ -365,8 +345,7 @@ Store-context names (e.g. a comprehension target, or the target of an assignment
 ## Pylance / Pyright
 
 The package ships `py.typed` and `__init__.pyi`, so `mpt[...]` is not flagged as
-an error and Pylance understands the macro-call syntax — both with
-`from mathprint import mpt` and `from mathprint_main import macros, mpt`.
+an error and Pylance understands the macro-call syntax.
 
 ---
 
@@ -436,7 +415,6 @@ src/
   mathprint/                # helper module (one-liner bootstrap) + no-op stub
     __init__.py
     stub.py                 # `from mathprint.stub import mpt` disables mathprint
-    latex.py                # `import mathprint.latex` enables LaTeX output
     py.typed                # PEP 561 marker
   mathprint_jupyter.py      # Jupyter/IPython extension
   mathprint_main/           # macro implementation

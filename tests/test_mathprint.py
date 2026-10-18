@@ -5,7 +5,7 @@ Run from the project root with::
     python -m pytest
 """
 
-from mathprint_main import macros, mpt
+from mathprint import mpt
 
 
 # --- Phase 3: evaluation ---------------------------------------------------

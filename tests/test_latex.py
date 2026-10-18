@@ -1,4 +1,4 @@
-"""Tests for the optional LaTeX output mode (``import mathprint.latex``).
+"""Tests for the optional LaTeX output mode (``mpt.latex()``).
 
 The plain-text default must stay untouched, and LaTeX mode must route the three
 lines through ``mathprint_main._display_latex`` instead of ``print``. The actual
@@ -11,7 +11,7 @@ import os
 import pytest
 
 import mathprint_main
-from mathprint_main import macros, mpt  # noqa: F401  (``macros`` is mcpyrate's marker)
+from mathprint import mpt
 
 _HERE = os.path.abspath(__file__)
 
@@ -49,24 +49,33 @@ def test_other_file_is_unaffected(capsys):
     assert result == 5
 
 
+# --- The `mpt.latex()` switch ----------------------------------------------
+
+def test_latex_switch_enable_disable():
+    assert mpt.latex() == _HERE
+    assert mathprint_main._latex_enabled(_HERE)
+    assert mpt.latex(False) == _HERE
+    assert not mathprint_main._latex_enabled(_HERE)
+
+
 # --- Enabled: routes to LaTeX ----------------------------------------------
 
 def test_enabled_routes_all_three_lines(shown):
-    mathprint_main._LATEX_FILES.add(_HERE)
+    mpt.latex()
     result = mpt[2 + 3]
     assert shown == ["2 + 3", "2 + 3", "5"]
     assert result == 5
 
 
 def test_enabled_assignment_carries_name(shown):
-    mathprint_main._LATEX_FILES.add(_HERE)
+    mpt.latex()
     mpt[g_latex := 2 * 3]
     assert shown == ["g_latex := 2 * 3", "g_latex := 2 * 3", "g_latex := 6"]
     assert g_latex == 6
 
 
 def test_enabled_prints_nothing_to_stdout(capsys, shown):
-    mathprint_main._LATEX_FILES.add(_HERE)
+    mpt.latex()
     mpt[1 + 1]
     assert capsys.readouterr().out == ""
 
@@ -97,30 +106,7 @@ def test_pytexit_input_rewrites_walrus():
     assert mathprint_main._pytexit_input("y + 2") == "y + 2"
 
 
-# --- The `mathprint.latex` module -------------------------------------------
-
-def test_module_enable_disable():
-    from mathprint import latex
-
-    latex.disable()
-    assert not mathprint_main._latex_enabled(_HERE)
-    assert latex.enable() == _HERE
-    assert mathprint_main._latex_enabled(_HERE)
-    assert latex.is_enabled()
-    latex.disable()
-    assert not mathprint_main._latex_enabled(_HERE)
-
-
-def test_module_enable_explicit_target():
-    from mathprint import latex
-
-    latex.enable("some_other_file.py")
-    assert mathprint_main._latex_enabled(os.path.abspath("some_other_file.py"))
-    latex.disable("some_other_file.py")
-    assert not mathprint_main._latex_enabled(os.path.abspath("some_other_file.py"))
-
-
-def test_import_enables_calling_file(tmp_path):
+def test_latex_switch_scopes_to_calling_file(tmp_path):
     import subprocess
     import sys
     from pathlib import Path
@@ -129,9 +115,10 @@ def test_import_enables_calling_file(tmp_path):
     script.write_text(
         "import os\n"
         "import mathprint_main\n"
-        "from mathprint import latex\n"
-        "assert mathprint_main._latex_enabled(os.path.abspath(__file__)), mathprint_main._LATEX_FILES\n"
-        "assert mathprint_main._LATEX_FILES == {os.path.abspath(__file__)}, mathprint_main._LATEX_FILES\n"
+        "from mathprint import mpt\n"
+        "key = mpt.latex()\n"
+        "assert key == os.path.abspath(__file__), (key, __file__)\n"
+        "assert mathprint_main._latex_enabled(os.path.abspath(__file__))\n"
         "print('ok')\n",
         encoding="utf-8",
     )

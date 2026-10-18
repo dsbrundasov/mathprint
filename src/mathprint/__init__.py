@@ -17,10 +17,9 @@ The script then runs under both::
     python myscript.py
     macropython myscript.py
 
-The macro implementation lives in the ``mathprint_main`` package; the classic
-mcpyrate macro-import form keeps working, too::
-
-    from mathprint_main import macros, mpt
+The macro implementation lives in the (internal) ``mathprint_main`` package.
+This module registers ``mpt`` as a global mcpyrate macro; that is why a plain
+``from mathprint import mpt`` is enough, even in imported modules.
 
 **Why this is needed.** mcpyrate expands macros while a source file is being
 compiled, but Python compiles the main script *before* running any of its code,
@@ -40,13 +39,13 @@ sites, import the no-op stub instead -- change only this one line::
 See ``mathprint.stub`` for details. Importing that submodule must not activate
 the macro hook, which is why ``mpt`` below is provided lazily (PEP 562).
 
-To render the three lines as LaTeX (Jupyter) instead of plain text, import the
-LaTeX switch in the file that uses ``mpt``::
+To render the three lines as LaTeX (Jupyter) instead of plain text, call
+``mpt.latex()`` in the file that uses ``mpt``::
 
-    import mathprint.latex
+    mpt.latex()
 
-See ``mathprint.latex`` for details. The switch is scoped to that file and is
-off by default.
+``mpt.latex(False)`` switches back to plain text. The switch is scoped to that
+file (or notebook) and is off by default.
 """
 
 import os
@@ -84,14 +83,24 @@ def _import_site_globals(start_frame):
 
 
 def _load_macro():
-    """Activate mcpyrate and return the ``mpt`` macro function."""
+    """Activate mcpyrate, register ``mpt`` as a global macro, and return it.
+
+    Registering in mcpyrate's ``global_bindings`` makes ``mpt`` a known macro
+    for every module compiled from now on (not only the one that imported it),
+    so the one-line ``from mathprint import mpt`` works in imported modules too
+    — not just in the top-level script.
+    """
     try:
         from mcpyrate.activate import activate
         activate()
     except ImportError:
         pass
     import mcpyrate  # noqa: F401
+    from mcpyrate.core import global_bindings
+
     import mathprint_main
+
+    global_bindings["mpt"] = mathprint_main.mpt
     return mathprint_main.mpt
 
 
@@ -106,8 +115,8 @@ def _run_as_main(path, macro):
     with open(path, "rb") as f:
         source = f.read()
 
-    # Register the macro only while compiling the script, so that this does not
-    # affect any other module imported later in the process.
+    # `mpt` is already registered globally by `_load_macro`; make sure it is
+    # present for this compile too (and restore whatever was there before).
     previous: Any = global_bindings.get("mpt", _MISSING)
     global_bindings["mpt"] = macro
     try:

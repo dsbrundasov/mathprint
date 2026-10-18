@@ -51,14 +51,6 @@ def test_one_liner_in_cell(shell):
     assert shell.user_ns["x"] == 15
 
 
-def test_macro_import_in_cell(shell):
-    result, out = _run(shell, "from mathprint_main import macros, mpt\na = 2\nb = 3\nmpt[c := a*b + a]\n")
-    assert result.success, result.error_in_exec
-    assert "c := a*b + a" in out
-    assert "c := 2*3 + 2" in out
-    assert shell.user_ns["c"] == 8
-
-
 def test_module_not_expanded_in_cell(shell):
     result, out = _run(shell, "import math as mt\nz = 10\nmpt[mt.floor(z) + z]\n")
     assert result.success, result.error_in_exec
@@ -80,7 +72,7 @@ def test_latex_mode_in_cell(shell):
     result, out = _run(
         shell,
         "from mathprint import mpt\n"
-        "import mathprint.latex\n"
+        "mpt.latex()\n"
         "y = 5\n"
         "z = 10\n"
         "mpt[x := y+z]\n",

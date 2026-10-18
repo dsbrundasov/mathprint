@@ -17,14 +17,10 @@ Then, in any cell::
     z = 10
     mpt[x := y * 7 + z]
 
-The explicit mcpyrate form works too::
-
-    from mathprint_main import macros, mpt
-
-To render the output as LaTeX instead of plain text, import the switch in any
+To render the output as LaTeX instead of plain text, call ``mpt.latex()`` in any
 cell (it applies to the rest of the notebook)::
 
-    import mathprint.latex
+    mpt.latex()
 
 Unload with::
 
