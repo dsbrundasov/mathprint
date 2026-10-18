@@ -53,3 +53,11 @@ def area(r):
 
 mpt[area(y) + int(z)]
 
+# Several expressions in one call: each item is printed in order, exactly as if
+# it had its own `mpt[...]`, and the call yields a tuple of the values.
+mpt[
+    s_diff := (s_11 := (s_12 := y + z)),
+    p_diff := (p_11 := (p_12 := y * z)),
+]
+print("returned tuple:", s_diff, p_diff)
+

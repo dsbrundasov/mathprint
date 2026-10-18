@@ -100,3 +100,17 @@ def test_precision_mode_in_cell(shell):
     assert "3.123123412 + 0" not in out
     assert mathprint_main._precision_for("<ipython>") == 4
     assert shell.user_ns["v"] == 3.123123412
+
+
+def test_sequence_in_cell(shell):
+    result, out = _run(
+        shell,
+        "from mathprint import mpt\n"
+        "y = 5\n"
+        "z = 10\n"
+        "mpt[y + z, y * z]\n",
+    )
+    assert result.success, result.error_in_exec
+    assert "y + z" in out and "5 + 10" in out
+    assert "y * z" in out and "5 * 10" in out
+    assert result.result == (15, 50)   # the call yields a tuple of the values

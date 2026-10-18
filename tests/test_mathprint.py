@@ -7,6 +7,10 @@ Run from the project root with::
 
 from mathprint import mpt
 
+import os
+
+_HERE = os.path.abspath(__file__)
+
 
 # --- Phase 3: evaluation ---------------------------------------------------
 
@@ -255,3 +259,85 @@ def test_chained_comparison(capsys):
     mpt[0 < y < z]
     out = capsys.readouterr().out.splitlines()
     assert out == ["0 < y < z", "0 < 5 < 10", "True"]
+
+
+# --- Several expressions in one call: `mpt[a, b, ...]` ---------------------
+
+def test_sequence_prints_each_item_in_order(capsys):
+    y = 5
+    z = 10
+    result = mpt[y + z, y * z]
+    out = capsys.readouterr().out.splitlines()
+    assert out == [
+        "y + z", "5 + 10", "15",
+        "y * z", "5 * 10", "50",
+    ]
+    # One value per item, gathered into a tuple.
+    assert result == (15, 50)
+
+
+def test_sequence_matches_separate_calls(capsys):
+    y = 5
+    z = 10
+
+    mpt[y + z]
+    mpt[y * z]
+    separate = capsys.readouterr().out
+
+    mpt[y + z, y * z]
+    sequenced = capsys.readouterr().out
+
+    assert sequenced == separate
+
+
+def test_sequence_assignment_binds_in_caller_scope(capsys):
+    L_min = 3
+    result = mpt[
+        L_diff := (L_11 := (L_12 := 2 * L_min)),
+        g_m_diff := (g_m_11 := (g_m_12 := (10 * 2 * L_min))),
+    ]
+    out = capsys.readouterr().out.splitlines()
+    assert out == [
+        "L_diff := (L_11 := (L_12 := 2 * L_min))",
+        "L_diff := (L_11 := (L_12 := 2 * 3))",
+        "L_diff := 6",
+        "g_m_diff := (g_m_11 := (g_m_12 := (10 * 2 * L_min)))",
+        "g_m_diff := (g_m_11 := (g_m_12 := (10 * 2 * 3)))",
+        "g_m_diff := 60",
+    ]
+    assert result == (6, 60)
+    # Every name bound by the walrus chains exists in *this* scope.
+    assert (L_diff, L_11, L_12) == (6, 6, 6)
+    assert (g_m_diff, g_m_11, g_m_12) == (60, 60, 60)
+
+
+def test_sequence_trailing_comma(capsys):
+    y = 5
+    z = 10
+    result = mpt[y + z, y * z, ]
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["y + z", "5 + 10", "15", "y * z", "5 * 10", "50"]
+    assert result == (15, 50)
+
+
+def test_sequence_with_precision(capsys):
+    import mathprint_main
+
+    mathprint_main._PRECISION_FILES[_HERE] = 4
+    try:
+        v = 3.123123412
+        result = mpt[v + 0, v * 1]
+        out = capsys.readouterr().out.splitlines()
+        assert out == ["v + 0", "3.123 + 0", "3.123", "v * 1", "3.123 * 1", "3.123"]
+        assert result == (3.123123412, 3.123123412)
+    finally:
+        mathprint_main._PRECISION_FILES.pop(_HERE, None)
+
+
+def test_tuple_value_is_a_single_expression(capsys):
+    # A tuple *value* behind a name is still one expression, not a sequence.
+    t = (1, 2, 3)
+    result = mpt[t]
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["t", "(1, 2, 3)", "(1, 2, 3)"]
+    assert result == (1, 2, 3)

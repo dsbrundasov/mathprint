@@ -31,6 +31,16 @@ The macro works both as a plain expression and as an assignment::
 
 The assignment form additionally binds the name and uses it as a prefix.
 
+Several expressions can be sequenced in one call, one per comma::
+
+    mpt[
+        L_diff := (L_11 := (L_12 := 2*L_min)),
+        g_m_diff := (g_m_11 := (g_m_12 := GBW * 2*pi * C_C)),
+    ]
+
+Each item is printed exactly as if it had its own ``mpt[...]`` call, in order,
+and the whole call yields a tuple of the item values.
+
 Usage::
 
     y = 5
@@ -490,9 +500,25 @@ def _exact_template(segment, node, source):
     return "".join(pieces), names
 
 
-def mpt(expr, **kw):
-    expander = kw.get("expander")
+def _collect(*values):
+    """Collect the values of a sequenced ``mpt[a, b, ...]`` into a tuple.
 
+    Used by the multi-expression form: each argument evaluates one ``mpt`` item
+    (printing its three lines) in left-to-right order, and this just gathers the
+    resulting values. The arguments are evaluated in the *caller's* scope, so a
+    `name := ...` inside one of them binds the name there, just like in a
+    standalone ``mpt[name := ...]``.
+    """
+    return values
+
+
+def _expand_one(expr, source, key):
+    """Expand a single ``mpt[...]`` item into its three-phase sequence.
+
+    Returns an expression AST that prints the source line, the substituted line
+    and the value line (in that order) and evaluates to the value. `key` is the
+    compile-time source file, used to scope ``mpt.latex()`` / ``mpt.precision()``.
+    """
     # Assignment form `mpt[name := expression]`; anything else (including a bare
     # expression such as `mpt[(a + z) * 2]`) is printed without a name prefix.
     if type(expr) is ast.NamedExpr and type(expr.target) is ast.Name:
@@ -503,14 +529,6 @@ def mpt(expr, **kw):
         value = expr
         prefix = ""
         fallback_symbolic = ast.unparse(expr)
-
-    filename = getattr(expander, "filename", None)
-    source = _read_source(filename) if filename else None
-    if source is None:
-        source = _SOURCE_OVERRIDE
-
-    # The compile-time source file, used to scope `mpt.latex()` / `mpt.precision()`.
-    key = _latex_key(filename)
 
     # Phase 1: the original expression, exactly as written at the use site.
     # Phase 2: the same source with each variable substituted in place.
@@ -556,6 +574,36 @@ def mpt(expr, **kw):
             h[_print_value](u[key], u[prefix], a[expr])
         )[-1]
     ]
+
+
+def mpt(expr, **kw):
+    """The ``mpt`` macro.
+
+    A single ``mpt[expression]`` prints three lines and yields the value. The
+    multi-expression form ``mpt[a, b, ...]`` prints each item exactly as if it
+    had its own ``mpt[...]`` call -- in order -- and yields a tuple of the
+    values, one per item.
+    """
+    expander = kw.get("expander")
+
+    filename = getattr(expander, "filename", None)
+    source = _read_source(filename) if filename else None
+    if source is None:
+        source = _SOURCE_OVERRIDE
+
+    # The compile-time source file, used to scope `mpt.latex()` / `mpt.precision()`.
+    key = _latex_key(filename)
+
+    # `mpt[a, b, ...]` sequences several expressions. Each item is expanded to
+    # its own three-phase sequence and passed as a call argument, so the items
+    # are evaluated (and printed) left to right in the caller's scope; the
+    # helper gathers their values into a tuple.
+    if type(expr) is ast.Tuple:
+        parts = [_expand_one(element, source, key) for element in expr.elts]
+        call = ast.Call(func=q[h[_collect]], args=parts, keywords=[])
+        return ast.fix_missing_locations(call)
+
+    return _expand_one(expr, source, key)
 
 
 # `mpt.latex()` switches the calling file (or notebook) to LaTeX output, and

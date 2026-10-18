@@ -13,6 +13,9 @@ Values are taken from the scope where the macro is used, so the substituted line
 reflects the actual runtime state. The expression is evaluated only **once**: the
 printed value and the macro's return value come from that single evaluation.
 
+> **Vibecode project** — built by iterating with an AI assistant. See
+> [Vibecode project](#vibecode-project) at the end.
+
 ---
 
 ## Contents
@@ -21,6 +24,7 @@ printed value and the macro's return value come from that single evaluation.
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Several expressions in one call](#several-expressions-in-one-call)
 - [Jupyter / IPython](#jupyter--ipython)
 - [LaTeX output](#latex-output)
 - [Display precision](#display-precision)
@@ -31,6 +35,7 @@ printed value and the macro's return value come from that single evaluation.
 - [Updating the package](#updating-the-package)
 - [Development](#development)
 - [Project structure](#project-structure)
+- [Vibecode project](#vibecode-project)
 
 ---
 
@@ -66,6 +71,9 @@ mpt[y > (a + z) * 2]
 
 - Prints **three lines**: the source, the substitution, and the computed value.
   The expression is evaluated **once**.
+- Several expressions in one call — `mpt[a, b, ...]` — each printed as if it had
+  its own `mpt[...]`, and the call yields a tuple of the values. See
+  [Several expressions in one call](#several-expressions-in-one-call).
 - All comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, `is`, `in`, …) and
   chained comparisons (`0 < y < z`).
 - Only **names** are substituted; functions and attributes are not evaluated.
@@ -193,6 +201,57 @@ Both ways work; pick whichever fits.
 
 The package ships `py.typed` and `__init__.pyi`, so `mpt[...]` is not flagged as
 an error and Pylance understands the macro-call syntax.
+
+---
+
+## Several expressions in one call
+
+A single call can sequence several expressions, one per comma. Each item is
+printed exactly as if it had its own `mpt[...]` call, in order, and the call
+yields a **tuple** of the values:
+
+```python
+from mathprint import mpt
+from math import pi
+
+L_min = 2e-6
+GBW = 10e6
+C_C = 1e-12
+
+mpt[
+    L_diff := (L_11 := (L_12 := 2*L_min)),
+    g_m_diff := (g_m_11 := (g_m_12 := (GBW * 2*pi * C_C))),
+]
+```
+
+prints, in order:
+
+```
+L_diff := (L_11 := (L_12 := 2*L_min))
+L_diff := (L_11 := (L_12 := 2*2e-06))
+L_diff := 4e-06
+g_m_diff := (g_m_11 := (g_m_12 := (GBW * 2*pi * C_C)))
+g_m_diff := (g_m_11 := (g_m_12 := (10000000.0 * 2*3.141592653589793 * 1e-12)))
+g_m_diff := 6.283185307179587e-05
+```
+
+and returns `(4e-06, 6.283185307179587e-05)`. Names bound with `name := ...`
+inside an item land in the scope of the call, exactly as for a standalone
+`mpt[name := ...]`, so the tuple unpacks and the inner names exist too:
+
+```python
+L_diff, g_m_diff = mpt[
+    L_diff := (L_11 := (L_12 := 2*L_min)),
+    g_m_diff := (g_m_11 := (g_m_12 := (GBW * 2*pi * C_C))),
+]
+# L_diff == 4e-06, g_m_diff == 6.28...e-05, L_11 == L_12 == 4e-06, ...
+```
+
+This is equivalent to writing one `mpt[...]` per expression.
+
+> A tuple *value* behind a single name is still one expression: `mpt[t]` where
+> `t = (1, 2, 3)` prints the tuple, it does not sequence anything. The sequence
+> form is the top-level comma inside the subscript.
 
 ---
 
@@ -481,4 +540,10 @@ examples/
 
 ---
 
-"D:\\SyncStore\\Work\\Python\\MathPrint\\README.md"
+## Vibecode project
+
+This is a **vibecode** project: it was built by iterating with an AI coding
+assistant, driven by real usage rather than a formal spec. The upside is a
+tight, practical tool that does exactly what was needed; the caveat is that it
+is best treated as such — read the tests before depending on subtle behaviour in
+production, and expect the occasional rough edge.
