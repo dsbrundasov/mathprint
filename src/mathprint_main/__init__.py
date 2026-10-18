@@ -12,8 +12,9 @@
      exactly.
 
   3. **Evaluation.** The expression itself is evaluated once, its value is
-     printed, and that value becomes the value of the whole macro call (so it
-     can be assigned or printed).
+     printed (with the ``name := `` prefix in the assignment form, matching
+     phases 1 and 2), and that value becomes the value of the whole macro call
+     (so it can be assigned or printed).
 
 Import the macro as a macro-import; the ``macros`` marker is mandatory for
 mcpyrate::
@@ -43,7 +44,7 @@ prints::
 
     x := y * 7 + z
     x := 5 * 7 + 10
-    45
+    x := 45
 
 and assigns ``x = 45``.
 
@@ -102,13 +103,15 @@ def _render(name, value):
     return str(value)
 
 
-def _print_value(value):
+def _print_value(prefix, value):
     """Phase 3 helper: print the computed value and return it unchanged.
 
-    Used instead of ``(print(expr), expr)`` so that the expression is evaluated
-    exactly once while still being printed.
+    ``prefix`` is the ``name := `` prefix for the assignment form (empty for a
+    bare expression), so the value line matches phases 1 and 2 (e.g.
+    ``g_m_diff := 12``). Used instead of ``(print(expr), expr)`` so that the
+    expression is evaluated exactly once while still being printed.
     """
-    print(value)
+    print(f"{prefix}{value}")
     return value
 
 
@@ -290,12 +293,13 @@ def mpt(expr, **kw):
     )
 
     # Phase 3: runs left to right: print source line, print substituted line,
-    # then evaluate the original expression once, print its value, and yield it
-    # (assigning the name, if there is one). `_print_value` prints and returns the
-    # value, so the expression is not evaluated twice.
+    # then evaluate the original expression once and print its value (with the
+    # `name := ` prefix in the assignment form, so the value line matches phases
+    # 1 and 2), yielding the value. `_print_value` prints and returns it, so the
+    # expression is not evaluated twice.
     return q[(
             print(u[symbolic]),
             print(a[numeric]),
-            h[_print_value](a[expr])
+            h[_print_value](u[prefix], a[expr])
         )[-1]
     ]

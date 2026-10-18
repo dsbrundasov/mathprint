@@ -19,8 +19,16 @@ def test_bare_expression(capsys):
 
 def test_assignment(capsys):
     mpt[x := 2 * 3]
-    capsys.readouterr()
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["x := 2 * 3", "x := 2 * 3", "x := 6"]
     assert x == 6
+
+
+def test_assignment_value_line_has_name(capsys):
+    # The value line carries the name, like phases 1 and 2.
+    mpt[g_m_diff := 12]
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["g_m_diff := 12", "g_m_diff := 12", "g_m_diff := 12"]
 
 
 def test_expression_evaluated_exactly_once(capsys):
@@ -52,7 +60,7 @@ def test_assignment_prefix(capsys):
     z = 10
     mpt[x := y + z]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["x := y + z", "x := 5 + 10", "15"]
+    assert out == ["x := y + z", "x := 5 + 10", "x := 15"]
     assert x == 15
 
 

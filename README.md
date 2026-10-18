@@ -47,7 +47,7 @@ z = 10
 mpt[x := y * 7 + z]
 # x := y * 7 + z
 # x := 5 * 7 + 10
-# 45
+# x := 45
 
 # Bare expression.
 mpt[(a + z) * 2]
@@ -227,7 +227,7 @@ z = 10
 mpt[x := y * 7 + z]
 # x := y * 7 + z
 # x := 5 * 7 + 10
-# 45
+# x := 45
 x  # → 45
 
 mt.floor(z) + z  # → mt.floor(10) + 10
@@ -287,8 +287,9 @@ A complete example is in [examples/demo_stub.py](examples/demo_stub.py).
    *in place* by its current value. Nothing is evaluated or simplified here; only
    names are textually substituted, and their order is preserved exactly.
 3. **Evaluation.** The expression itself is evaluated once; its value is printed
-   as the third line and also becomes the value of the macro, so it can be
-   assigned or printed: `result = mpt[(a + z) * 2]`.
+   as the third line (with the `name := ` prefix in the assignment form, so all
+   three lines carry the name) and also becomes the value of the macro, so it can
+   be assigned or printed: `result = mpt[(a + z) * 2]`.
 
 ---
 
@@ -433,7 +434,7 @@ z = 10
 mpt[x := y * 7 + z]
 # x := y * 7 + z
 # x := 5 * 7 + 10
-# 45
+# x := 45
 
 mpt[(a + z) * 2]
 # (a + z) * 2
@@ -559,7 +560,7 @@ z = 10
 mpt[x := y * 7 + z]
 # x := y * 7 + z
 # x := 5 * 7 + 10
-# 45
+# x := 45
 x  # → 45
 
 mt.floor(z) + z  # → mt.floor(10) + 10
@@ -609,7 +610,9 @@ from mathprint.stub import mpt     # заглушка (no-op)
 2. **Подстановка.** Каждая переменная заменяется своим значением *на месте*.
    Ничего не вычисляется; порядок сохраняется.
 3. **Вычисление.** Выражение вычисляется один раз; его значение печатается
-   третьей строкой и становится значением макроса: `result = mpt[(a + z) * 2]`.
+   третьей строкой (в форме присваивания — с префиксом `name := `, так что все
+   три строки содержат имя) и становится значением макроса:
+   `result = mpt[(a + z) * 2]`.
 
 ### Гарантия порядка
 
