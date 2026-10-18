@@ -91,7 +91,6 @@ is still evaluated, and the macro's return value is unrounded. ``mpt.precision()
 """
 
 import ast
-import copy
 import decimal
 import importlib.util
 import os
@@ -99,6 +98,7 @@ import sys
 import types
 from fractions import Fraction
 
+from mcpyrate.core import MacroExpansionError
 from mcpyrate.quotes import macros, q, a, u, h
 
 
@@ -389,43 +389,6 @@ class _LoadNameCollector(ast.NodeVisitor):
             self.names.append(node)
 
 
-class _NamePlaceholderer(ast.NodeTransformer):
-    """Replace each loaded `Name` with a positional placeholder.
-
-    Used only as a fallback when the source text is unavailable. Names are
-    numbered in AST-traversal order, which for all practical expressions is
-    source order. Store-context names are left untouched.
-    """
-
-    def __init__(self):
-        self.names = []
-
-    def visit_Name(self, node):
-        if not isinstance(node.ctx, ast.Load):
-            return node
-        index = len(self.names)
-        self.names.append(node)
-        placeholder = ast.Name(id=f"__mpt_value_{index}__", ctx=ast.Load())
-        return ast.copy_location(placeholder, node)
-
-
-def _name_template(value):
-    """Fallback: ``(template, names)`` from an unparsed expression.
-
-    `template` is a `str.format`-style template where every variable is a
-    ``{}`` placeholder; `names` is the list of `Name` nodes, in the order the
-    placeholders appear.
-    """
-    placeholderer = _NamePlaceholderer()
-    transformed = placeholderer.visit(copy.deepcopy(value))
-
-    template = ast.unparse(transformed)
-    template = _escape_braces(template)
-    for index in range(len(placeholderer.names)):
-        template = template.replace(f"__mpt_value_{index}__", "{}")
-    return template, placeholderer.names
-
-
 def _escape_braces(text):
     """Escape literal braces so `str.format` treats them as literal text."""
     return text.replace("{", "{{").replace("}", "}}")
@@ -433,8 +396,8 @@ def _escape_braces(text):
 
 _SOURCE_CACHE = {}
 
-# Set by the Jupyter extension (`mathprint_main.jupyter`), where the code being
-# expanded has no backing source file; see `_exact_source`.
+# Set by the Jupyter extension (`mathprint_jupyter`), where the code being
+# expanded has no backing source file; the captured cell text is used instead.
 _SOURCE_OVERRIDE = None
 
 
@@ -491,7 +454,7 @@ def _exact_template(segment, node, source):
     cursor = 0
     for s, e, name in spans:
         if s < cursor:  # pragma: no cover - impossible for well-formed expressions
-            return None, []
+            raise MacroExpansionError("mpt: overlapping names in the expression")
         pieces.append(_escape_braces(segment_bytes[cursor:s].decode("utf-8")))
         pieces.append("{}")
         names.append(name)
@@ -512,45 +475,48 @@ def _collect(*values):
     return values
 
 
+def _exact_source(source, node):
+    """The exact source text of `node` (phase 1), or raise.
+
+    The macro prints the expression exactly as written, so the source text is
+    required. If it cannot be determined, raise rather than print something
+    subtly different from what the user wrote.
+    """
+    if source is None:
+        raise MacroExpansionError(
+            "mpt needs the source file to print the expression verbatim, but this "
+            "context has none (plain REPL, `python -c` and `exec` are not supported)"
+        )
+    segment = ast.get_source_segment(source, node)
+    if segment is None:
+        raise MacroExpansionError("mpt could not find the expression in the source text")
+    return segment
+
+
 def _expand_one(expr, source, key):
     """Expand a single ``mpt[...]`` item into its three-phase sequence.
 
+    ``source`` is the text of the file (or notebook cell) the expression comes
+    from -- required, see `_exact_source`. `key` is the compile-time source file,
+    used to scope ``mpt.latex()`` / ``mpt.precision()``.
+
     Returns an expression AST that prints the source line, the substituted line
-    and the value line (in that order) and evaluates to the value. `key` is the
-    compile-time source file, used to scope ``mpt.latex()`` / ``mpt.precision()``.
+    and the value line (in that order) and evaluates to the value.
     """
     # Assignment form `mpt[name := expression]`; anything else (including a bare
     # expression such as `mpt[(a + z) * 2]`) is printed without a name prefix.
     if type(expr) is ast.NamedExpr and type(expr.target) is ast.Name:
-        value = expr.value
         prefix = f"{expr.target.id} := "
-        fallback_symbolic = f"{prefix}{ast.unparse(value)}"
     else:
-        value = expr
         prefix = ""
-        fallback_symbolic = ast.unparse(expr)
 
-    # Phase 1: the original expression, exactly as written at the use site.
-    # Phase 2: the same source with each variable substituted in place.
-    symbolic = None
-    numeric_template = None
-    names = []
-    if source is not None:
-        try:
-            symbolic = ast.get_source_segment(source, expr)
-        except Exception:
-            symbolic = None
-        if symbolic is not None:
-            try:
-                numeric_template, names = _exact_template(symbolic, expr, source)
-            except Exception:
-                numeric_template = None
+    # Phase 1: the expression exactly as written at the use site.
+    symbolic = _exact_source(source, expr)
 
-    if symbolic is None:
-        symbolic = fallback_symbolic
-    if numeric_template is None:
-        template, names = _name_template(value)
-        numeric_template = prefix + template
+    # Phase 2: that same text, with each loaded name replaced in place by a
+    # positional placeholder; the placeholders are filled, positionally, with the
+    # values of those same name occurrences (see `_exact_template`).
+    numeric_template, names = _exact_template(symbolic, expr, source)
 
     numeric = ast.Call(func=ast.Attribute(
             value=ast.Constant(numeric_template),

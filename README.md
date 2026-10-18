@@ -421,6 +421,12 @@ A complete example is in [examples/demo_stub.py](examples/demo_stub.py).
    three lines carry the name) and also becomes the value of the macro, so it can
    be assigned or printed: `result = mpt[(a + z) * 2]`.
 
+> **A source file is required.** Phase 1 prints the expression *verbatim*, so
+> `mpt` reads the file it is being compiled from — or, in Jupyter, the captured
+> cell text. Contexts with no source text (plain `python -c`, `exec`, the bare
+> REPL) are not supported: there `mpt[...]` is not expanded at all, and a clear
+> macro-expansion error is raised rather than a subtly reformatted line.
+
 ---
 
 ## Order guarantee

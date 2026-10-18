@@ -341,3 +341,22 @@ def test_tuple_value_is_a_single_expression(capsys):
     out = capsys.readouterr().out.splitlines()
     assert out == ["t", "(1, 2, 3)", "(1, 2, 3)"]
     assert result == (1, 2, 3)
+
+
+# --- No source text: clear error, no silent fallback -----------------------
+
+def test_missing_source_raises_clear_error(monkeypatch):
+    import ast
+
+    import pytest
+
+    import mathprint_main
+    from mcpyrate.core import MacroExpansionError
+
+    class _Expander:
+        filename = None
+
+    node = ast.parse("y + 0", mode="eval").body
+    monkeypatch.setattr(mathprint_main, "_SOURCE_OVERRIDE", None)
+    with pytest.raises(MacroExpansionError):
+        mathprint_main.mpt(node, expander=_Expander())
