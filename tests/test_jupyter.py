@@ -26,12 +26,21 @@ def _run(shell, code):
 def shell():
     ip = InteractiveShell.instance()
     load_ipython_extension(ip)
+    _clear_latex()
     try:
         yield ip
     finally:
         unload_ipython_extension(ip)
+        _clear_latex()
         for name in ("a", "b", "c", "k", "mt", "x", "y", "z"):
             ip.user_ns.pop(name, None)
+
+
+def _clear_latex():
+    import mathprint_main
+
+    mathprint_main._LATEX_FILES.discard("<ipython>")
+    mathprint_main._LATEX_FILES.discard(mathprint_main._ANY_FILE)
 
 
 def test_one_liner_in_cell(shell):
@@ -62,3 +71,22 @@ def test_comparison_order_in_cell(shell):
     assert result.success, result.error_in_exec
     assert "z > (y - 1) * 2" in out
     assert "10 > (5 - 1) * 2" in out
+
+
+def test_latex_mode_in_cell(shell):
+    pytest.importorskip("pytexit")
+    import mathprint_main
+
+    result, out = _run(
+        shell,
+        "from mathprint import mpt\n"
+        "import mathprint.latex\n"
+        "y = 5\n"
+        "z = 10\n"
+        "mpt[x := y+z]\n",
+    )
+    assert result.success, result.error_in_exec
+    # The file/notebook opted in, so plain text is no longer printed.
+    assert "x := y+z" not in out
+    assert mathprint_main._latex_enabled("<ipython>")
+    assert shell.user_ns["x"] == 15

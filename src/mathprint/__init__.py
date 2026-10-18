@@ -39,6 +39,14 @@ sites, import the no-op stub instead -- change only this one line::
 
 See ``mathprint.stub`` for details. Importing that submodule must not activate
 the macro hook, which is why ``mpt`` below is provided lazily (PEP 562).
+
+To render the three lines as LaTeX (Jupyter) instead of plain text, import the
+LaTeX switch in the file that uses ``mpt``::
+
+    import mathprint.latex
+
+See ``mathprint.latex`` for details. The switch is scoped to that file and is
+off by default.
 """
 
 import os
@@ -64,7 +72,12 @@ def _import_site_globals(start_frame):
     frame = start_frame
     while frame is not None:
         name = frame.f_globals.get("__name__", "")
-        if name and name != "mathprint" and "importlib" not in name:
+        if (
+            name
+            and name != "mathprint"
+            and not name.startswith("mathprint.")
+            and "importlib" not in name
+        ):
             return frame.f_globals
         frame = frame.f_back
     return None

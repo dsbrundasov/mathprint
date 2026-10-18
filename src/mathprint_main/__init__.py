@@ -68,11 +68,18 @@ to a module, function, method, built-in or class, it is left as written:
 ``mpt[math.floor(y)]`` prints ``math.floor(5)`` (not ``<module 'math' …>.floor(5)``),
 ``mpt[f(y)]`` prints ``f(5)`` (not ``<function f at 0x…>(5)``), and
 ``mpt[int(y)]`` prints ``int(5)`` (not ``<class 'int'>(5)``).
+
+**LaTeX output (opt-in, per file).** Output is plain text by default. Importing
+``mathprint.latex`` at the top of a file switches *that file* to LaTeX: each line
+is converted with ``pytexit.py2tex`` and shown via ``IPython.display``, the
+``display(Latex(py2tex(...)))`` recipe. Importing it elsewhere has no effect on
+this file, and nothing here imports ``pytexit`` unless LaTeX mode is used.
 """
 
 import ast
 import copy
 import importlib.util
+import os
 import types
 
 from mcpyrate.quotes import macros, q, a, u, h
@@ -103,16 +110,115 @@ def _render(name, value):
     return str(value)
 
 
-def _print_value(prefix, value):
+# --- Output mode: plain text (default) or LaTeX ----------------------------
+
+# `mpt` prints plain text by default. Importing `mathprint.latex` (or calling
+# `mathprint.latex.enable()`) switches the *file where it is imported* to LaTeX
+# output: each printed line is converted with `pytexit.py2tex` and shown via
+# `IPython.display`, the classic `display(Latex(py2tex(...)))` recipe.
+#
+# The set holds normalized scope keys (`_latex_key`). The virtual `_ANY_FILE`
+# key switches *every* file (used when no source file can be determined, e.g. in
+# `python -c`). Because keys are per-file, importing `mathprint.latex` never
+# leaks into other modules.
+_ANY_FILE = "*"
+_LATEX_FILES = set()
+
+
+def _latex_key(filename):
+    """Map a source `filename` to the scope key used by `_LATEX_FILES`."""
+    if not filename:
+        return _ANY_FILE
+    if filename.startswith("<") and filename.endswith(">"):
+        return filename  # virtual name such as "<ipython>", not a real path
+    return os.path.abspath(filename)
+
+
+def _latex_enabled(key):
+    """Return whether `key` (or every file, via `_ANY_FILE`) uses LaTeX output."""
+    return _ANY_FILE in _LATEX_FILES or key in _LATEX_FILES
+
+
+def _emit(key, text):
+    """Phase 1/2 helper: print one line, or render it as LaTeX."""
+    if _latex_enabled(key):
+        _display_latex(text)
+    else:
+        print(text)
+
+
+def _print_value(key, prefix, value):
     """Phase 3 helper: print the computed value and return it unchanged.
 
     ``prefix`` is the ``name := `` prefix for the assignment form (empty for a
     bare expression), so the value line matches phases 1 and 2 (e.g.
     ``g_m_diff := 12``). Used instead of ``(print(expr), expr)`` so that the
-    expression is evaluated exactly once while still being printed.
+    expression is evaluated exactly once while still being printed. In LaTeX
+    mode the line is rendered with ``_display_latex`` instead of printed.
     """
-    print(f"{prefix}{value}")
+    line = f"{prefix}{value}"
+    if _latex_enabled(key):
+        _display_latex(line)
+    else:
+        print(line)
     return value
+
+
+def _pytexit_input(text):
+    """Turn a printed line into a Python expression ``py2tex`` can parse.
+
+    The assignment prefix uses ``:=``; ``py2tex`` expects a comparison, so it is
+    rewritten to ``==`` (rendered as ``=``).
+    """
+    return text.replace(":=", "==")
+
+
+def _display_latex(text):
+    """Render one line as LaTeX, like ``display(Latex(py2tex(text)))``."""
+    from IPython.display import Latex, display
+
+    from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
+
+    _fix_pytexit_constants()
+    tex = py2tex(
+        _pytexit_input(text),
+        print_latex=False,
+        print_formula=False,
+        tex_multiplier=r"\cdot",
+        simplify_output=False,
+        simplify_multipliers=False,
+    )
+    display(Latex(tex))
+
+
+def _fix_pytexit_constants():
+    """Teach ``pytexit`` to render numeric literals on Python >= 3.8.
+
+    ``pytexit`` 0.4.0 only defines ``visit_Num``; since Python 3.8 numeric
+    literals parse to ``ast.Constant``, which falls through to ``generic_visit``
+    and raises. Add the missing visitor (a no-op on fixed versions). Only invoked
+    in LaTeX mode, so the default plain-text path never touches ``pytexit``.
+    """
+    try:
+        from pytexit.core import core  # pyright: ignore[reportMissingModuleSource]
+
+        visitor = core.LatexVisitor
+    except Exception:  # pragma: no cover - pytexit missing or restructured
+        return
+    if "visit_Constant" in visitor.__dict__:
+        return
+
+    def visit_Constant(self, n):
+        value = n.value
+        if isinstance(value, bool):
+            return str(value)
+        if self.simplify_fractions and any(value == k for k in core.fracs):
+            return r"{0}\frac{{{1}}}{{{2}}}".format(*core.fracs[value])
+        if self.looks_like_int(value):
+            return "%d" % value
+        return str(value)
+
+    visitor.visit_Constant = visit_Constant
 
 
 def _rendered_arg(name_node):
@@ -296,10 +402,13 @@ def mpt(expr, **kw):
     # then evaluate the original expression once and print its value (with the
     # `name := ` prefix in the assignment form, so the value line matches phases
     # 1 and 2), yielding the value. `_print_value` prints and returns it, so the
-    # expression is not evaluated twice.
+    # expression is not evaluated twice. When the file opts into LaTeX output
+    # (`mathprint.latex`), `_emit`/`_print_value` render each line instead of
+    # printing it; `key` is the compile-time source file the calls belong to.
+    key = _latex_key(filename)
     return q[(
-            print(u[symbolic]),
-            print(a[numeric]),
-            h[_print_value](u[prefix], a[expr])
+            h[_emit](u[key], u[symbolic]),
+            h[_emit](u[key], a[numeric]),
+            h[_print_value](u[key], u[prefix], a[expr])
         )[-1]
     ]

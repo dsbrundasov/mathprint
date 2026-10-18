@@ -22,6 +22,7 @@ printed value and the macro's return value come from that single evaluation.
 - [Installation](#installation)
 - [Usage](#usage)
 - [Jupyter / IPython](#jupyter--ipython)
+- [LaTeX output](#latex-output)
 - [Disabling mathprint (no-op stub)](#disabling-mathprint-no-op-stub)
 - [How it works (three phases)](#how-it-works-three-phases)
 - [Order guarantee](#order-guarantee)
@@ -72,6 +73,9 @@ mpt[y > (a + z) * 2]
   `math.floor(5)` (not `<module 'math' …>.floor(5)`), `f(y)` stays `f(5)` (not
   `<function f at 0x…>(5)`), and `int(y)` stays `int(5)` (not `<class 'int'>(5)`).
 - Works under both `python` and `macropython`.
+- Optional **LaTeX output** (Jupyter): `import mathprint.latex` renders the three
+  lines as LaTeX via `pytexit` + `IPython.display`, per file. Plain text stays
+  the default. See [LaTeX output](#latex-output).
 
 ---
 
@@ -80,6 +84,7 @@ mpt[y > (a + z) * 2]
 - Python >= 3.9
 - `mcpyrate` (installed automatically as a dependency)
 - Optional: `sympy` for symbolic expressions
+- Optional: `pytexit` + `IPython` for LaTeX output (`pip install ".[latex]"`)
 
 ---
 
@@ -246,6 +251,52 @@ A complete example notebook is in [examples/demo.ipynb](examples/demo.ipynb).
 
 ---
 
+## LaTeX output
+
+Output is **plain text by default**. To render the three lines as LaTeX — like
+`display(Latex(py2tex(...)))` — import `mathprint.latex` at the top of the file:
+
+```python
+from mathprint import mpt
+import mathprint.latex          # <- this file now renders LaTeX
+
+y = 5
+z = 10
+mpt[x := y * 7 + z]
+```
+
+The switch is scoped to the file that imports it (in a notebook, to the whole
+notebook), so importing it here never affects other modules. Toggle it
+explicitly if you prefer:
+
+```python
+import mathprint.latex as mpl
+
+mpl.enable()                     # enable for the calling file
+mpl.enable("/path/to/file.py")   # or target a specific file
+mpl.disable()                    # back to plain text
+mpl.is_enabled()                 # current state
+```
+
+Requires `pytexit` and `IPython`:
+
+```powershell
+python -m pip install ".[latex]" --no-compile
+```
+
+They are imported **lazily**, only when a line is actually rendered, so the
+default plain-text path never imports them. Rendering needs a LaTeX-aware
+frontend (Jupyter); outside IPython, `display` falls back to a plain repr.
+
+> **Numbers.** `pytexit` 0.4.0 predates `ast.Constant` and fails on numeric
+> literals on Python >= 3.8. mathprint patches in the missing visitor
+> automatically — only in LaTeX mode, and only if it is absent.
+
+A complete example notebook is in
+[examples/demo_latex.ipynb](examples/demo_latex.ipynb).
+
+---
+
 ## Disabling mathprint (no-op stub)
 
 To switch mathprint off in a module **without touching any of its call sites**,
@@ -385,6 +436,7 @@ src/
   mathprint/                # helper module (one-liner bootstrap) + no-op stub
     __init__.py
     stub.py                 # `from mathprint.stub import mpt` disables mathprint
+    latex.py                # `import mathprint.latex` enables LaTeX output
     py.typed                # PEP 561 marker
   mathprint_jupyter.py      # Jupyter/IPython extension
   mathprint_main/           # macro implementation
@@ -394,282 +446,20 @@ src/
 typings/
   mcpyrate/
     quotes.pyi              # stubs for q/u/a operators from mcpyrate.quotes
+  pytexit/
+    __init__.pyi            # stubs for the optional pytexit dependency
 tests/
   test_mathprint.py         # script tests
   test_jupyter.py           # Jupyter/IPython tests (skipped if IPython missing)
   test_stub.py              # no-op stub tests
+  test_latex.py             # LaTeX output mode tests
 examples/
   demo.py                   # script example (`from mathprint import mpt`)
   demo_stub.py              # script example (stub, prints nothing)
   demo.ipynb                # Jupyter notebook example
+  demo_latex.ipynb          # Jupyter notebook example (LaTeX output)
 ```
 
 ---
 
-## Русский
-
-### Возможности
-
-Макрос `mpt` для [mcpyrate](https://github.com/Technologicat/mcpyrate), который
-печатает математическое выражение **тремя строками**:
-
-1. **Символьно** — в точности как записано в коде, с именами переменных.
-2. **С подставленными значениями** — каждая переменная заменяется своим текущим
-   значением на месте.
-3. **Вычисленное значение** — выражение, посчитанное ровно один раз.
-
-Значения берутся из той области видимости, где стоит вызов. Выражение считается
-только **один раз**: напечатанное значение и возвращаемое значение макроса —
-результат одного и того же вычисления.
-
-```python
-from mathprint import mpt
-
-import sympy as sp
-
-a = sp.symbols("a")   # символьная переменная
-y = 5
-z = 10
-
-mpt[x := y * 7 + z]
-# x := y * 7 + z
-# x := 5 * 7 + 10
-# x := 45
-
-mpt[(a + z) * 2]
-# (a + z) * 2
-# (a + 10) * 2
-# 2*a + 20
-
-mpt[y > (a + z) * 2]
-# y > (a + z) * 2
-# 5 > (a + 10) * 2
-# 2*a + 20 < 5
-```
-
-- Печатает **три строки**: исходник, подстановку и вычисленное значение.
-  Выражение вычисляется **один раз**.
-- Все операторы сравнения (`==`, `!=`, `<`, `<=`, `>`, `>=`, `is`, `in`, …)
-  и цепочки (`0 < y < z`).
-- Подставляются только **имена**; функции и атрибуты не вычисляются. Цели
-  присваивания (имя слева от `:=`) не подставляются.
-- Имена модулей, функций и классов **не** расширяются: `math.floor(y)` остаётся
-  `math.floor(5)` (а не `<module 'math' …>.floor(5)`), `f(y)` — `f(5)` (а не
-  `<function f at 0x…>(5)`), `int(y)` — `int(5)` (а не `<class 'int'>(5)`).
-- Работает и под `python`, и под `macropython`.
-
-### Требования
-
-- Python >= 3.9
-- `mcpyrate` (устанавливается автоматически)
-- Опционально `sympy` для символьных выражений
-
-### Установка
-
-Откройте терминал в корне проекта (`MathPrint`) и выполните команду для того
-интерпретатора/окружения, из которого будете запускать скрипты.
-
-**Editable (рекомендуется для разработки):**
-```powershell
-python -m pip install -e . --no-compile
-```
-
-**Обычная (копией в site-packages):**
-```powershell
-python -m pip install . --no-compile
-```
-
-**С инструментами разработки (sympy, pytest):**
-```powershell
-python -m pip install -e ".[dev]" --no-compile
-```
-
-**Удаление:**
-```powershell
-python -m pip uninstall mathprint
-```
-
-> Всегда используйте `--no-compile` — mcpyrate ломает `compileall` в Python 3.14.
-
-**Если что-то сломалось:**
-```powershell
-python -m pip uninstall mathprint -y
-python -m pip cache purge
-python -m pip install -e . --no-compile
-python -c "import mathprint; print(mathprint.__file__)"
-# Ожидается: ...\src\mathprint\__init__.py
-```
-
-> Если `from mathprint import mpt` выдаёт `ImportError: cannot import name 'macros'` —
-> в `site-packages` остался старый пакет `mathprint/` (из до переименования).
-> Закройте все процессы Python/Jupyter/VS Code и удалите каталог вручную.
-
-### Использование
-
-**Вариант A — одна строка (рекомендуется):**
-```python
-from mathprint import mpt
-```
-
-После этого `mpt[...]` сразу доступен:
-```python
-from mathprint import mpt
-
-y = 5
-z = 10
-mpt[x := y * 7 + z]
-```
-
-Работает и под `python`, и под `macropython`.
-
-**Вариант B — явная форма mcpyrate:**
-```python
-from mathprint_main import macros, mpt
-```
-
-Макро-импорт **обязан** начинаться со служебного имени `macros` — так требует
-mcpyrate. Импортировать `from mathprint_main import mpt` без `macros` нельзя.
-
-**Запуск скрипта с макросом:**
-1. Через `macropython`: `macropython myscript.py`
-2. Обычным `python myscript.py` — поставьте `from mathprint import mpt` первой строкой.
-
-Важно: этот импорт должен идти **до** любого другого кода, потому что при обычном
-запуске файл исполняется дважды.
-
-### Jupyter / IPython
-
-Ноутбуки по умолчанию не используют хук mcpyrate. Для Jupyter есть расширение:
-
-```python
-%load_ext mathprint_jupyter
-```
-
-После этого используйте макрос так же, как в скриптах:
-
-```python
-from mathprint import mpt
-
-import math as mt
-import sympy as sp
-
-a = sp.symbols("a")
-y = 5
-z = 10
-
-mpt[x := y * 7 + z]
-# x := y * 7 + z
-# x := 5 * 7 + 10
-# x := 45
-x  # → 45
-
-mt.floor(z) + z  # → mt.floor(10) + 10
-```
-
-Отключить расширение: `%unload_ext mathprint_jupyter`
-
-Пример ноутбука: [examples/demo.ipynb](examples/demo.ipynb).
-
-### Отключение mathprint (заглушка)
-
-Чтобы отключить mathprint в модуле, **не трогая сами вызовы**, измените только
-строку импорта:
-
-```python
-# from mathprint import mpt        # настоящий макрос (нужен mcpyrate)
-from mathprint.stub import mpt     # заглушка (no-op)
-```
-
-С заглушкой `mpt[expr]` — обычная подписка:
-
-- выражение вычисляется **один раз**, затем значение отбрасывается — `mpt[…]`
-  возвращает `None` (форма `:=` по-прежнему связывает имя, т.к. walrus
-  вычисляется при вычислении подписки);
-- **ничего не печатается**;
-- не задействуются макрораскрытие, хук импорта, `mcpyrate` и `mathprint_main`.
-
-> Тело `__getitem__` заглушки пустое (`pass`) намеренно: так компилируется самый
-> дешёвый вариант подписки, и отключённый путь остаётся максимально лёгким.
-
-`mathprint.stub` намеренно самодостаточен — он ничего не импортирует из проекта,
-даже аннотации типов, — поэтому его импорт не может активировать макро-механизм.
-Удобно держать `mpt[…]` во всём коде и отключать его по файлам (например, в
-проде).
-
-> **Почему `mpt[…]`, а не `mpt(…)`?** `mpt` — макрос mcpyrate. Python разбирает
-> `mpt[expr]` как подписку и передаёт макросу *невычисленное* выражение (AST) на
-> этапе компиляции; вызов `mpt(expr)` вычислил бы выражение заранее и передал
-> только значение. Подписка — соглашение макросов, и именно она позволяет одной
-> и той же строке `mpt[expr]` работать с заглушкой.
-
-Пример: [examples/demo_stub.py](examples/demo_stub.py).
-
-### Как это работает (три фазы)
-
-1. **Исходник.** Выражение *в точности так, как записано в коде*.
-2. **Подстановка.** Каждая переменная заменяется своим значением *на месте*.
-   Ничего не вычисляется; порядок сохраняется.
-3. **Вычисление.** Выражение вычисляется один раз; его значение печатается
-   третьей строкой (в форме присваивания — с префиксом `name := `, так что все
-   три строки содержат имя) и становится значением макроса:
-   `result = mpt[(a + z) * 2]`.
-
-### Гарантия порядка
-
-Подстановочная строка строится прямо из точного исходного текста. Каждое
-вхождение имени заменяется позиционным плейсхолдером (по байтовому смещению в
-файле), затем плейсхолдеры заполняются значениями тех же переменных в том же
-порядке. i-й плейсхолдер по построению — это i-е вхождение в исходнике, поэтому
-i-е значение всегда попадает на i-е место — независимо от операторов (включая
-сравнения) и от того, что за значения (числа, sympy-символы, модули, функции, …).
-
-### Pylance / Pyright
-
-Пакет поставляет `py.typed` и `__init__.pyi`, поэтому `mpt[...]` не
-подсвечивается ошибкой.
-
-### Обновление пакета
-
-**Editable (`pip install -e .`):** правьте файлы в `src/` — изменения подхватятся
-при следующем запуске. mcpyrate кэширует результат в `__pycache__`; при
-подозрении на устаревший кэш удалите его и перезапустите Python.
-
-**Обычная (`pip install .`):** изменения в исходниках не попадут автоматически.
-Переустановите: `python -m pip install --force-reinstall . --no-compile`
-
-### Разработка
-
-```powershell
-python examples/demo.py   # демо-скрипт
-python -m pytest          # тесты (--assert=plain в pyproject.toml)
-```
-
-### Структура проекта
-
-```
-pyproject.toml              # метаданные пакета
-README.md                   # этот файл
-pyrightconfig.json          # настройки Pyright/Pylance
-src/
-  mathprint/                # модуль-помощник (one-liner bootstrap) + заглушка
-    __init__.py
-    stub.py                 # `from mathprint.stub import mpt` отключает mathprint
-    py.typed                # маркер PEP 561
-  mathprint_jupyter.py      # расширение для Jupyter/IPython
-  mathprint_main/           # реализация макроса mpt
-    __init__.py
-    __init__.pyi            # типовые заглушки
-    py.typed                # маркер PEP 561
-typings/
-  mcpyrate/
-    quotes.pyi              # заглушки для q/u/a из mcpyrate.quotes
-tests/
-  test_mathprint.py         # тесты скриптов
-  test_jupyter.py           # тесты Jupyter (пропускаются без IPython)
-  test_stub.py              # тесты заглушки
-examples/
-  demo.py                   # пример скрипта
-  demo_stub.py              # пример скрипта с заглушкой (ничего не печатает)
-  demo.ipynb                # пример ноутбука
-```
 "D:\\SyncStore\\Work\\Python\\MathPrint\\README.md"

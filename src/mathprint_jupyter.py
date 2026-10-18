@@ -21,6 +21,11 @@ The explicit mcpyrate form works too::
 
     from mathprint_main import macros, mpt
 
+To render the output as LaTeX instead of plain text, import the switch in any
+cell (it applies to the rest of the notebook)::
+
+    import mathprint.latex
+
 Unload with::
 
     %unload_ext mathprint_jupyter
