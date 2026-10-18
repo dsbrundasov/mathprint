@@ -174,20 +174,31 @@ def _pytexit_input(text):
 
 
 def _display_latex(text):
-    """Render one line as LaTeX, like ``display(Latex(py2tex(text)))``."""
+    """Render one line as LaTeX, like ``display(Latex(py2tex(text)))``.
+
+    If ``py2tex`` cannot convert the line (some operators are unsupported), fall
+    back to printing the plain text so a single expression cannot break the run.
+    """
     from IPython.display import Latex, display
 
     from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
 
     _fix_pytexit_constants()
-    tex = py2tex(
-        _pytexit_input(text),
-        print_latex=False,
-        print_formula=False,
-        tex_multiplier=r"\cdot",
-        simplify_output=False,
-        simplify_multipliers=False,
-    )
+    try:
+        tex = py2tex(
+            _pytexit_input(text),
+            print_latex=False,
+            print_formula=False,
+            # `{\cdot}` (not bare `\cdot`): py2tex emits the multiplier with no
+            # separator, so `\cdot` would glue onto the next token and KaTeX
+            # would read e.g. `\cdotC_L` as the undefined `\cdotC`.
+            tex_multiplier=r"{\cdot}",
+            simplify_output=False,
+            simplify_multipliers=False,
+        )
+    except Exception:
+        print(text)
+        return
     display(Latex(tex))
 
 

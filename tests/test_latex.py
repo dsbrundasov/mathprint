@@ -158,13 +158,31 @@ def test_pytexit_renders_numeric_lines():
         mathprint_main._pytexit_input("x := 5 * 7 + 10"),
         print_latex=False,
         print_formula=False,
-        tex_multiplier=r"\cdot",
+        tex_multiplier=r"{\cdot}",
         simplify_output=False,
         simplify_multipliers=False,
     )
     assert "5" in tex
     assert "10" in tex
     assert "=" in tex
+
+
+def test_pytexit_multiplier_does_not_glue_tokens():
+    # Regression: a bare `\cdot` glues onto the next name (`\cdotC_L`), which
+    # KaTeX rejects as an undefined control sequence.
+    pytest.importorskip("pytexit")
+    from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
+
+    tex = py2tex(
+        "C_C == 0.22 * C_L",
+        print_latex=False,
+        print_formula=False,
+        tex_multiplier=r"{\cdot}",
+        simplify_output=False,
+        simplify_multipliers=False,
+    )
+    assert r"\cdotC" not in tex
+    assert r"{\cdot}" in tex
 
 
 def test_display_latex_shows_a_latex_object(monkeypatch):
@@ -179,3 +197,17 @@ def test_display_latex_shows_a_latex_object(monkeypatch):
 
     assert len(calls) == 1
     assert isinstance(calls[0], Latex)
+
+
+def test_display_latex_falls_back_to_plain_text(capsys, monkeypatch):
+    pytest.importorskip("pytexit")
+    import IPython.display as ipython_display
+
+    calls = []
+    monkeypatch.setattr(ipython_display, "display", lambda obj: calls.append(obj))
+
+    # `and` is not convertible by py2tex; the line must be printed, not crash.
+    mathprint_main._display_latex("x == (y and z)")
+
+    assert calls == []
+    assert capsys.readouterr().out.strip() == "x == (y and z)"
