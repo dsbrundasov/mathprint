@@ -3,13 +3,15 @@
 [![Python](https://img.shields.io/badge/python-%3E%3D3.9-blue)](https://www.python.org/)
 [![mcpyrate](https://img.shields.io/badge/mcpyrate-%3E%3D4.0-green)](https://github.com/Technologicat/mcpyrate)
 
-An [mcpyrate](https://github.com/Technologicat/mcpyrate) macro `mpt` that prints a mathematical expression **twice**:
+An [mcpyrate](https://github.com/Technologicat/mcpyrate) macro `mpt` that prints a mathematical expression as **three lines**:
 
 1. **Symbolically** — exactly as written in the source code (names preserved).
 2. **With values substituted** — each variable replaced in place by its current value.
+3. **The computed value** — the expression, evaluated exactly once.
 
 Values are taken from the scope where the macro is used, so the substituted line
-reflects the actual runtime state.
+reflects the actual runtime state. The expression is evaluated only **once**: the
+printed value and the macro's return value come from that single evaluation.
 
 ---
 
@@ -45,18 +47,23 @@ z = 10
 mpt[x := y * 7 + z]
 # x := y * 7 + z
 # x := 5 * 7 + 10
+# 45
 
 # Bare expression.
 mpt[(a + z) * 2]
 # (a + z) * 2
-# (a_a + 10) * 2
+# (a + 10) * 2
+# 2*a + 20
 
 # Comparison: variables substituted in place, order preserved.
 mpt[y > (a + z) * 2]
 # y > (a + z) * 2
-# 5 > (a_a + 10) * 2
+# 5 > (a + 10) * 2
+# 2*a + 20 < 5
 ```
 
+- Prints **three lines**: the source, the substitution, and the computed value.
+  The expression is evaluated **once**.
 - All comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, `is`, `in`, …) and
   chained comparisons (`0 < y < z`).
 - Only **names** are substituted; functions and attributes are not evaluated.
@@ -218,6 +225,9 @@ y = 5
 z = 10
 
 mpt[x := y * 7 + z]
+# x := y * 7 + z
+# x := 5 * 7 + 10
+# 45
 x  # → 45
 
 mt.floor(z) + z  # → mt.floor(10) + 10
@@ -276,9 +286,9 @@ A complete example is in [examples/demo_stub.py](examples/demo_stub.py).
 2. **Substitution.** The same expression with each local variable replaced
    *in place* by its current value. Nothing is evaluated or simplified here; only
    names are textually substituted, and their order is preserved exactly.
-3. **Evaluation.** The expression itself is evaluated once and becomes the value
-   of the macro, so it can be assigned or printed:
-   `result = mpt[(a + z) * 2]`.
+3. **Evaluation.** The expression itself is evaluated once; its value is printed
+   as the third line and also becomes the value of the macro, so it can be
+   assigned or printed: `result = mpt[(a + z) * 2]`.
 
 ---
 
@@ -400,13 +410,16 @@ examples/
 ### Возможности
 
 Макрос `mpt` для [mcpyrate](https://github.com/Technologicat/mcpyrate), который
-печатает математическое выражение **дважды**:
+печатает математическое выражение **тремя строками**:
 
 1. **Символьно** — в точности как записано в коде, с именами переменных.
 2. **С подставленными значениями** — каждая переменная заменяется своим текущим
    значением на месте.
+3. **Вычисленное значение** — выражение, посчитанное ровно один раз.
 
-Значения берутся из той области видимости, где стоит вызов.
+Значения берутся из той области видимости, где стоит вызов. Выражение считается
+только **один раз**: напечатанное значение и возвращаемое значение макроса —
+результат одного и того же вычисления.
 
 ```python
 from mathprint import mpt
@@ -420,16 +433,21 @@ z = 10
 mpt[x := y * 7 + z]
 # x := y * 7 + z
 # x := 5 * 7 + 10
+# 45
 
 mpt[(a + z) * 2]
 # (a + z) * 2
-# (a_a + 10) * 2
+# (a + 10) * 2
+# 2*a + 20
 
 mpt[y > (a + z) * 2]
 # y > (a + z) * 2
-# 5 > (a_a + 10) * 2
+# 5 > (a + 10) * 2
+# 2*a + 20 < 5
 ```
 
+- Печатает **три строки**: исходник, подстановку и вычисленное значение.
+  Выражение вычисляется **один раз**.
 - Все операторы сравнения (`==`, `!=`, `<`, `<=`, `>`, `>=`, `is`, `in`, …)
   и цепочки (`0 < y < z`).
 - Подставляются только **имена**; функции и атрибуты не вычисляются. Цели
@@ -539,6 +557,9 @@ y = 5
 z = 10
 
 mpt[x := y * 7 + z]
+# x := y * 7 + z
+# x := 5 * 7 + 10
+# 45
 x  # → 45
 
 mt.floor(z) + z  # → mt.floor(10) + 10
@@ -587,7 +608,8 @@ from mathprint.stub import mpt     # заглушка (no-op)
 1. **Исходник.** Выражение *в точности так, как записано в коде*.
 2. **Подстановка.** Каждая переменная заменяется своим значением *на месте*.
    Ничего не вычисляется; порядок сохраняется.
-3. **Вычисление.** Выражение вычисляется один раз: `result = mpt[(a + z) * 2]`.
+3. **Вычисление.** Выражение вычисляется один раз; его значение печатается
+   третьей строкой и становится значением макроса: `result = mpt[(a + z) * 2]`.
 
 ### Гарантия порядка
 

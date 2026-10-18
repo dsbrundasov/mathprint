@@ -11,8 +11,9 @@
      only names are textually substituted, and their order is preserved
      exactly.
 
-  3. **Evaluation.** The expression itself is evaluated once, producing the
-     value of the whole macro call (so it can be assigned or printed).
+  3. **Evaluation.** The expression itself is evaluated once, its value is
+     printed, and that value becomes the value of the whole macro call (so it
+     can be assigned or printed).
 
 Import the macro as a macro-import; the ``macros`` marker is mandatory for
 mcpyrate::
@@ -42,6 +43,7 @@ prints::
 
     x := y * 7 + z
     x := 5 * 7 + 10
+    45
 
 and assigns ``x = 45``.
 
@@ -98,6 +100,16 @@ def _render(name, value):
     if isinstance(value, _OPAQUE_TYPES):
         return name
     return str(value)
+
+
+def _print_value(value):
+    """Phase 3 helper: print the computed value and return it unchanged.
+
+    Used instead of ``(print(expr), expr)`` so that the expression is evaluated
+    exactly once while still being printed.
+    """
+    print(value)
+    return value
 
 
 def _rendered_arg(name_node):
@@ -278,11 +290,12 @@ def mpt(expr, **kw):
     )
 
     # Phase 3: runs left to right: print source line, print substituted line,
-    # then evaluate the original expression (assigning the name, if there is
-    # one, and yielding the value, which becomes the value of the macro call).
+    # then evaluate the original expression once, print its value, and yield it
+    # (assigning the name, if there is one). `_print_value` prints and returns the
+    # value, so the expression is not evaluated twice.
     return q[(
             print(u[symbolic]),
             print(a[numeric]),
-            a[expr]
+            h[_print_value](a[expr])
         )[-1]
     ]

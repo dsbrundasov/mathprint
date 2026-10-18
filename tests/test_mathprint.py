@@ -13,7 +13,7 @@ from mathprint_main import macros, mpt
 def test_bare_expression(capsys):
     result = mpt[2 + 3]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["2 + 3", "2 + 3"]
+    assert out == ["2 + 3", "2 + 3", "5"]
     assert result == 5
 
 
@@ -23,12 +23,27 @@ def test_assignment(capsys):
     assert x == 6
 
 
+def test_expression_evaluated_exactly_once(capsys):
+    calls = []
+
+    def f(x):
+        calls.append(x)
+        return x * 2
+
+    y = 5
+    result = mpt[f(y)]
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["f(y)", "f(5)", "10"]
+    assert calls == [5]  # `f` is called once, not once for printing and once for the result
+    assert result == 10
+
+
 def test_variables_substituted(capsys):
     y = 5
     z = 10
     result = mpt[y * z]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["y * z", "5 * 10"]
+    assert out == ["y * z", "5 * 10", "50"]
     assert result == 50
 
 
@@ -37,7 +52,7 @@ def test_assignment_prefix(capsys):
     z = 10
     mpt[x := y + z]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["x := y + z", "x := 5 + 10"]
+    assert out == ["x := y + z", "x := 5 + 10", "15"]
     assert x == 15
 
 
@@ -71,7 +86,7 @@ def test_phase1_keeps_redundant_parentheses(capsys):
     z = 10
     mpt[(y) + (z)]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["(y) + (z)", "(5) + (10)"]
+    assert out == ["(y) + (z)", "(5) + (10)", "15"]
 
 
 # --- Phase 2: substitution preserves order ---------------------------------
@@ -81,7 +96,7 @@ def test_substitution_is_in_place(capsys):
     z = 10
     mpt[z - y + z]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["z - y + z", "10 - 5 + 10"]
+    assert out == ["z - y + z", "10 - 5 + 10", "15"]
 
 
 def test_order_preserved_mixed(capsys):
@@ -108,7 +123,7 @@ def test_order_preserved_repeated_and_nested(capsys):
     c = 3
     mpt[c - (a - (b - (c - a)))]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["c - (a - (b - (c - a)))", "3 - (1 - (2 - (3 - 1)))"]
+    assert out == ["c - (a - (b - (c - a)))", "3 - (1 - (2 - (3 - 1)))", "2"]
 
 
 def test_order_preserved_deep_fraction(capsys):
@@ -149,7 +164,7 @@ def test_function_names_not_expanded(capsys):
     y = 5
     result = mpt[f(y)]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["f(y)", "f(5)"]
+    assert out == ["f(y)", "f(5)", "6"]
     assert result == 6
 
 
@@ -158,7 +173,7 @@ def test_lambda_name_not_expanded(capsys):
     y = 5
     mpt[f(y)]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["f(y)", "f(5)"]
+    assert out == ["f(y)", "f(5)", "5"]
 
 
 def test_builtin_function_names_not_expanded(capsys):
@@ -166,7 +181,7 @@ def test_builtin_function_names_not_expanded(capsys):
     result = mpt[len(str(y)) * 2]
     out = capsys.readouterr().out.splitlines()
     # Both `len` (built-in function) and `str` (class) stay as written.
-    assert out == ["len(str(y)) * 2", "len(str(5)) * 2"]
+    assert out == ["len(str(y)) * 2", "len(str(5)) * 2", "2"]
     assert result == 2
 
 
@@ -179,7 +194,7 @@ def test_class_names_not_expanded(capsys):
     y = 5
     result = mpt[int(y)]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["int(y)", "int(5)"]
+    assert out == ["int(y)", "int(5)", "5"]
     assert result == 5
 
 
@@ -193,7 +208,7 @@ def test_bound_method_name_not_expanded(capsys):
     y = 5
     result = mpt[add(y)]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["add(y)", "add(5)"]
+    assert out == ["add(y)", "add(5)", "6"]
     assert result == 6
 
 
@@ -204,7 +219,7 @@ def test_comparison_shows_side_values_when_single_names(capsys):
     z = 10
     result = mpt[y > z]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["y > z", "5 > 10"]
+    assert out == ["y > z", "5 > 10", "False"]
     assert result is False
 
 
@@ -213,7 +228,7 @@ def test_comparison_is_substituted_not_evaluated(capsys):
     z = 10
     result = mpt[y < z * 2]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["y < z * 2", "5 < 10 * 2"]
+    assert out == ["y < z * 2", "5 < 10 * 2", "True"]
     assert result is True
 
 
@@ -231,4 +246,4 @@ def test_chained_comparison(capsys):
     z = 10
     mpt[0 < y < z]
     out = capsys.readouterr().out.splitlines()
-    assert out == ["0 < y < z", "0 < 5 < 10"]
+    assert out == ["0 < y < z", "0 < 5 < 10", "True"]
