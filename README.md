@@ -20,6 +20,7 @@ reflects the actual runtime state.
 - [Installation](#installation)
 - [Usage](#usage)
 - [Jupyter / IPython](#jupyter--ipython)
+- [Disabling mathprint (no-op stub)](#disabling-mathprint-no-op-stub)
 - [How it works (three phases)](#how-it-works-three-phases)
 - [Order guarantee](#order-guarantee)
 - [Pylance / Pyright](#pylance--pyright)
@@ -234,6 +235,36 @@ A complete example notebook is in [examples/demo.ipynb](examples/demo.ipynb).
 
 ---
 
+## Disabling mathprint (no-op stub)
+
+To switch mathprint off in a module **without touching any of its call sites**,
+change only the import line:
+
+```python
+# from mathprint import mpt        # real macro (needs mcpyrate)
+from mathprint.stub import mpt     # no-op
+```
+
+With this stub, `mpt[expr]` is an ordinary subscription:
+
+- the expression is evaluated **once**, then its value is discarded — `mpt[…]`
+  returns `None` (the `:=` form still binds, because the walrus runs while the
+  subscript is evaluated);
+- **nothing is printed**;
+- no macro expansion, import hook, `mcpyrate`, or `mathprint_main` is involved.
+
+> The stub's `__getitem__` body is empty (`pass`) on purpose: it compiles to the
+> cheapest possible subscript, so the disabled path stays as light as possible.
+
+`mathprint.stub` is deliberately self-contained — it imports nothing from the
+rest of the project, not even type annotations — so importing it can never
+activate the macro machinery. This makes it easy to keep `mpt[…]` throughout a
+codebase and disable it per file (e.g. in production).
+
+A complete example is in [examples/demo_stub.py](examples/demo_stub.py).
+
+---
+
 ## How it works (three phases)
 
 `mpt` renders an expression in three phases:
@@ -339,8 +370,10 @@ pyproject.toml              # package metadata and build config
 README.md                   # this file
 pyrightconfig.json          # Pyright/Pylance settings
 src/
-  mathprint/                # helper module (one-liner bootstrap)
+  mathprint/                # helper module (one-liner bootstrap) + no-op stub
     __init__.py
+    stub.py                 # `from mathprint.stub import mpt` disables mathprint
+    py.typed                # PEP 561 marker
   mathprint_jupyter.py      # Jupyter/IPython extension
   mathprint_main/           # macro implementation
     __init__.py
@@ -352,8 +385,10 @@ typings/
 tests/
   test_mathprint.py         # script tests
   test_jupyter.py           # Jupyter/IPython tests (skipped if IPython missing)
+  test_stub.py              # no-op stub tests
 examples/
   demo.py                   # script example (`from mathprint import mpt`)
+  demo_stub.py              # script example (stub, prints nothing)
   demo.ipynb                # Jupyter notebook example
 ```
 
@@ -510,6 +545,40 @@ mt.floor(z) + z  # → mt.floor(10) + 10
 
 Пример ноутбука: [examples/demo.ipynb](examples/demo.ipynb).
 
+### Отключение mathprint (заглушка)
+
+Чтобы отключить mathprint в модуле, **не трогая сами вызовы**, измените только
+строку импорта:
+
+```python
+# from mathprint import mpt        # настоящий макрос (нужен mcpyrate)
+from mathprint.stub import mpt     # заглушка (no-op)
+```
+
+С заглушкой `mpt[expr]` — обычная подписка:
+
+- выражение вычисляется **один раз**, затем значение отбрасывается — `mpt[…]`
+  возвращает `None` (форма `:=` по-прежнему связывает имя, т.к. walrus
+  вычисляется при вычислении подписки);
+- **ничего не печатается**;
+- не задействуются макрораскрытие, хук импорта, `mcpyrate` и `mathprint_main`.
+
+> Тело `__getitem__` заглушки пустое (`pass`) намеренно: так компилируется самый
+> дешёвый вариант подписки, и отключённый путь остаётся максимально лёгким.
+
+`mathprint.stub` намеренно самодостаточен — он ничего не импортирует из проекта,
+даже аннотации типов, — поэтому его импорт не может активировать макро-механизм.
+Удобно держать `mpt[…]` во всём коде и отключать его по файлам (например, в
+проде).
+
+> **Почему `mpt[…]`, а не `mpt(…)`?** `mpt` — макрос mcpyrate. Python разбирает
+> `mpt[expr]` как подписку и передаёт макросу *невычисленное* выражение (AST) на
+> этапе компиляции; вызов `mpt(expr)` вычислил бы выражение заранее и передал
+> только значение. Подписка — соглашение макросов, и именно она позволяет одной
+> и той же строке `mpt[expr]` работать с заглушкой.
+
+Пример: [examples/demo_stub.py](examples/demo_stub.py).
+
 ### Как это работает (три фазы)
 
 1. **Исходник.** Выражение *в точности так, как записано в коде*.
@@ -554,8 +623,10 @@ pyproject.toml              # метаданные пакета
 README.md                   # этот файл
 pyrightconfig.json          # настройки Pyright/Pylance
 src/
-  mathprint/                # модуль-помощник (one-liner bootstrap)
+  mathprint/                # модуль-помощник (one-liner bootstrap) + заглушка
     __init__.py
+    stub.py                 # `from mathprint.stub import mpt` отключает mathprint
+    py.typed                # маркер PEP 561
   mathprint_jupyter.py      # расширение для Jupyter/IPython
   mathprint_main/           # реализация макроса mpt
     __init__.py
@@ -567,8 +638,10 @@ typings/
 tests/
   test_mathprint.py         # тесты скриптов
   test_jupyter.py           # тесты Jupyter (пропускаются без IPython)
+  test_stub.py              # тесты заглушки
 examples/
   demo.py                   # пример скрипта
+  demo_stub.py              # пример скрипта с заглушкой (ничего не печатает)
   demo.ipynb                # пример ноутбука
 ```
 "D:\\SyncStore\\Work\\Python\\MathPrint\\README.md"
