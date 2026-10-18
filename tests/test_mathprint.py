@@ -142,6 +142,61 @@ def test_module_names_not_expanded(capsys):
     assert out[1] == "mt.floor(5) + mt.ceil(5)"
 
 
+def test_function_names_not_expanded(capsys):
+    def f(x):
+        return x + 1
+
+    y = 5
+    result = mpt[f(y)]
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["f(y)", "f(5)"]
+    assert result == 6
+
+
+def test_lambda_name_not_expanded(capsys):
+    f = lambda x: x  # noqa: E731
+    y = 5
+    mpt[f(y)]
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["f(y)", "f(5)"]
+
+
+def test_builtin_function_names_not_expanded(capsys):
+    y = 5
+    result = mpt[len(str(y)) * 2]
+    out = capsys.readouterr().out.splitlines()
+    # Both `len` (built-in function) and `str` (class) stay as written.
+    assert out == ["len(str(y)) * 2", "len(str(5)) * 2"]
+    assert result == 2
+
+
+def test_class_names_not_expanded(capsys):
+    class Point:
+        def __init__(self, x):
+            self.x = x
+
+    p = Point(3)
+    y = 5
+    result = mpt[int(y)]
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["int(y)", "int(5)"]
+    assert result == 5
+
+
+def test_bound_method_name_not_expanded(capsys):
+    class Counter:
+        def add(self, x):
+            return x + 1
+
+    counter = Counter()
+    add = counter.add
+    y = 5
+    result = mpt[add(y)]
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["add(y)", "add(5)"]
+    assert result == 6
+
+
 # --- Phase 2: comparisons are substituted, not evaluated -------------------
 
 def test_comparison_shows_side_values_when_single_names(capsys):

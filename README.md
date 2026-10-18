@@ -61,8 +61,9 @@ mpt[y > (a + z) * 2]
   chained comparisons (`0 < y < z`).
 - Only **names** are substituted; functions and attributes are not evaluated.
   Assignment targets (e.g. the name left of `:=`) are not substituted.
-- Module names are **not** expanded: `math.floor(y)` stays `math.floor(5)`, not
-  `<module 'math' (built-in)>.floor(5)`.
+- Module, function and class names are **not** expanded: `math.floor(y)` stays
+  `math.floor(5)` (not `<module 'math' …>.floor(5)`), `f(y)` stays `f(5)` (not
+  `<function f at 0x…>(5)`), and `int(y)` stays `int(5)` (not `<class 'int'>(5)`).
 - Works under both `python` and `macropython`.
 
 ---
@@ -291,8 +292,8 @@ positionally with the values of those very same occurrences. Because the i-th
 placeholder is by construction the i-th source occurrence, the i-th value
 necessarily lands in the i-th slot — regardless of the surrounding operators
 (including comparisons) and regardless of what the values are (numbers, sympy
-symbols, modules, …). No evaluation, arithmetic, or symbolic simplification
-happens in this phase, so nothing can move around.
+symbols, modules, functions, …). No evaluation, arithmetic, or symbolic
+simplification happens in this phase, so nothing can move around.
 
 Store-context names (e.g. a comprehension target, or the target of an assignment
 `mpt[name := …]`) are not substituted, because they are being bound, not read.
@@ -433,7 +434,9 @@ mpt[y > (a + z) * 2]
   и цепочки (`0 < y < z`).
 - Подставляются только **имена**; функции и атрибуты не вычисляются. Цели
   присваивания (имя слева от `:=`) не подставляются.
-- Имена модулей **не** расширяются: `math.floor(y)` остаётся `math.floor(5)`.
+- Имена модулей, функций и классов **не** расширяются: `math.floor(y)` остаётся
+  `math.floor(5)` (а не `<module 'math' …>.floor(5)`), `f(y)` — `f(5)` (а не
+  `<function f at 0x…>(5)`), `int(y)` — `int(5)` (а не `<class 'int'>(5)`).
 - Работает и под `python`, и под `macropython`.
 
 ### Требования
@@ -593,7 +596,7 @@ from mathprint.stub import mpt     # заглушка (no-op)
 файле), затем плейсхолдеры заполняются значениями тех же переменных в том же
 порядке. i-й плейсхолдер по построению — это i-е вхождение в исходнике, поэтому
 i-е значение всегда попадает на i-е место — независимо от операторов (включая
-сравнения) и от того, что за значения (числа, sympy-символы, модули, …).
+сравнения) и от того, что за значения (числа, sympy-символы, модули, функции, …).
 
 ### Pylance / Pyright
 

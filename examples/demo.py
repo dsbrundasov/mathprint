@@ -45,3 +45,11 @@ mpt[0 < y < (a + z) * 2]
 
 # Spacing in the source line is preserved exactly.
 mpt[  y*(z - y)+z  ]
+
+# Function and class names are not expanded either (like module names):
+# `area` and `int` stay as written, not `<function ...>` / `<class ...>`.
+def area(r):
+    return 3.14159 * r * r
+
+mpt[area(y) + int(z)]
+

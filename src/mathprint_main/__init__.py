@@ -60,9 +60,11 @@ this phase, so nothing can move around. Store-context names (e.g. a
 comprehension target, or the target of an assignment ``mpt[name := ...]``) are
 not substituted, because they are being bound, not read.
 
-**Modules are not expanded (phase 2).** If a name refers to a module, it is left
-as written: ``mpt[math.floor(y)]`` prints ``math.floor(5)``, not
-``<module 'math' (built-in)>.floor(5)``.
+**Modules, functions and classes are not expanded (phase 2).** If a name refers
+to a module, function, method, built-in or class, it is left as written:
+``mpt[math.floor(y)]`` prints ``math.floor(5)`` (not ``<module 'math' …>.floor(5)``),
+``mpt[f(y)]`` prints ``f(5)`` (not ``<function f at 0x…>(5)``), and
+``mpt[int(y)]`` prints ``int(5)`` (not ``<class 'int'>(5)``).
 """
 
 import ast
@@ -73,14 +75,27 @@ import types
 from mcpyrate.quotes import macros, q, a, u, h
 
 
+# Values whose ``str`` repr is noise (``<function f at 0x…>``, ``<class 'int'>``,
+# ``<module 'math' …>``). For these, phase 2 keeps the *name* used in the source
+# instead of substituting the value's repr.
+_OPAQUE_TYPES = (
+    types.ModuleType,          # modules
+    types.FunctionType,        # def / lambda
+    types.BuiltinFunctionType,  # len, math.floor (builtin_function_or_method)
+    types.MethodType,          # bound method of a Python object
+    type,                      # classes: int, str, MyClass
+)
+
+
 def _render(name, value):
     """Render one substituted value in phase 2.
 
-    Modules are *not* expanded: they keep the name used in the source (so
-    ``math.sqrt`` stays ``math.sqrt``, not ``<module 'math' ...>.sqrt``).
-    Everything else is substituted by ``str`` of its current value.
+    Modules, functions, methods, built-ins and classes are *not* expanded: they
+    keep the name used in the source (so ``math.sqrt`` stays ``math.sqrt``, ``f``
+    stays ``f``, ``int`` stays ``int``), instead of dumping an opaque ``<…>``
+    repr. Everything else is substituted by ``str`` of its current value.
     """
-    if isinstance(value, types.ModuleType):
+    if isinstance(value, _OPAQUE_TYPES):
         return name
     return str(value)
 
