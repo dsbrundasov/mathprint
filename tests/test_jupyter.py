@@ -59,6 +59,15 @@ def test_module_not_expanded_in_cell(shell):
     assert "mt.floor(10) + 10" in out
 
 
+def test_attribute_chain_substituted_in_cell(shell):
+    import math as mt
+
+    result, out = _run(shell, "import math as mt\nmpt[mt.pi]\n")
+    assert result.success, result.error_in_exec
+    assert "mt.pi" in out                 # phase 1: exact source
+    assert str(mt.pi) in out              # phase 2: the chain's value
+
+
 def test_comparison_order_in_cell(shell):
     result, out = _run(shell, "from mathprint import mpt\ny = 5\nz = 10\nmpt[z > (y - 1) * 2]\n")
     assert result.success, result.error_in_exec

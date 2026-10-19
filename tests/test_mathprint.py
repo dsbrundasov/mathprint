@@ -169,6 +169,62 @@ def test_module_names_not_expanded(capsys):
     assert out[1] == "mt.floor(5) + mt.ceil(5)"
 
 
+def test_attribute_chain_substituted(capsys):
+    # A dotted chain rooted at a name (like `me.H.atomic_number`) is a plain
+    # value here, so phase 2 replaces the whole chain with that value.
+    class Element:
+        atomic_number = 1
+
+    class Periodic:
+        H = Element()
+
+    me = Periodic()
+    result = mpt[me.H.atomic_number]
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["me.H.atomic_number", "1", "1"]
+    assert result == 1
+
+
+def test_attribute_chain_in_expression(capsys):
+    class Element:
+        atomic_weight = 12.011
+
+    class Periodic:
+        C = Element()
+
+    me = Periodic()
+    y = 2
+    result = mpt[me.C.atomic_weight + y]
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["me.C.atomic_weight + y", "12.011 + 2", "14.011"]
+    assert result == 14.011
+
+
+def test_attribute_holding_callable_not_expanded(capsys):
+    class Obj:
+        def method(self, x):
+            return x + 1
+
+    obj = Obj()
+    y = 5
+    result = mpt[obj.method(y)]
+    out = capsys.readouterr().out.splitlines()
+    # The chain holds a bound method, so it keeps its name (no `<bound ...>`).
+    assert out == ["obj.method(y)", "obj.method(5)", "6"]
+    assert result == 6
+
+
+def test_attribute_chain_from_module(capsys):
+    import math as mt
+
+    y = 2
+    # `mt.pi` is a plain float, so it is substituted, not left as a name.
+    mpt[mt.pi * y]
+    out = capsys.readouterr().out.splitlines()
+    assert out[0] == "mt.pi * y"
+    assert out[1] == f"{mt.pi} * 2"
+
+
 def test_function_names_not_expanded(capsys):
     def f(x):
         return x + 1

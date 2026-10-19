@@ -71,10 +71,13 @@ comprehension target, or the target of an assignment ``mpt[name := ...]``) are
 not substituted, because they are being bound, not read.
 
 **Modules, functions and classes are not expanded (phase 2).** If a name refers
-to a module, function, method, built-in or class, it is left as written:
-``mpt[math.floor(y)]`` prints ``math.floor(5)`` (not ``<module 'math' …>.floor(5)``),
-``mpt[f(y)]`` prints ``f(5)`` (not ``<function f at 0x…>(5)``), and
-``mpt[int(y)]`` prints ``int(5)`` (not ``<class 'int'>(5)``).
+to a module, function, method, built-in, class or other callable, it is left as
+written: ``mpt[math.floor(y)]`` prints ``math.floor(5)`` (not
+``<module 'math' …>.floor(5)``), ``mpt[f(y)]`` prints ``f(5)`` (not
+``<function f at 0x…>(5)``), and ``mpt[int(y)]`` prints ``int(5)`` (not
+``<class 'int'>(5)``). A *dotted chain* rooted at a name is one occurrence and
+is substituted as a unit: ``mpt[me.H.atomic_number]`` prints
+``me.H.atomic_number`` then ``1``, since the chain's value is a plain number.
 
 **LaTeX output (opt-in, per file).** Output is plain text by default. Calling
 ``mpt.latex()`` switches *the file where the call appears* to LaTeX: each line is
@@ -239,13 +242,15 @@ class Latex:
 
     @staticmethod
     def _patch_pytexit():
-        """Teach ``pytexit`` to render numeric literals on Python >= 3.8.
+        """Teach ``pytexit`` to render literals and dotted attributes.
 
-        ``pytexit`` 0.4.0 only defines ``visit_Num``; since Python 3.8 numeric
-        literals parse to ``ast.Constant``, which falls through to
-        ``generic_visit`` and raises. Add the missing visitor (a no-op on fixed
-        versions). Only invoked in LaTeX mode, so the default plain-text path
-        never touches ``pytexit``.
+        ``pytexit`` 0.4.0 has two gaps that make a line silently fall back to
+        plain text: it only defines ``visit_Num`` (Python >= 3.8 numeric
+        literals parse to ``ast.Constant``, which lands on the buggy
+        ``generic_visit`` and raises), and it has no ``visit_Attribute`` at all,
+        so any dotted access (``me.H.atomic_number``) fails the same way. Both
+        visitors are added (a no-op on fixed versions). Only invoked in LaTeX
+        mode, so the default plain-text path never touches ``pytexit``.
         """
         try:
             from pytexit.core import core  # pyright: ignore[reportMissingModuleSource]
@@ -253,20 +258,31 @@ class Latex:
             visitor = core.LatexVisitor
         except Exception:  # pragma: no cover - pytexit missing or restructured
             return
-        if "visit_Constant" in visitor.__dict__:
-            return
 
-        def visit_Constant(self, n):
-            value = n.value
-            if isinstance(value, bool):
+        if "visit_Constant" not in visitor.__dict__:
+            def visit_Constant(self, n):
+                value = n.value
+                if isinstance(value, bool):
+                    return str(value)
+                if self.simplify_fractions and any(value == k for k in core.fracs):
+                    return r"{0}\frac{{{1}}}{{{2}}}".format(*core.fracs[value])
+                if self.looks_like_int(value):
+                    return "%d" % value
                 return str(value)
-            if self.simplify_fractions and any(value == k for k in core.fracs):
-                return r"{0}\frac{{{1}}}{{{2}}}".format(*core.fracs[value])
-            if self.looks_like_int(value):
-                return "%d" % value
-            return str(value)
 
-        visitor.visit_Constant = visit_Constant
+            visitor.visit_Constant = visit_Constant
+
+        if "visit_Attribute" not in visitor.__dict__:
+            def visit_Attribute(self, n):
+                # No visitor for dotted access: render `me.H.atomic_number` as
+                # `me.H.atomic_{number}`, each part through the normal name
+                # formatting (`_` becomes a subscript, Greek names are mapped).
+                attr = self.visit(ast.Name(id=n.attr, ctx=ast.Load()))
+                return "{}.{}".format(self.visit(n.value), attr)
+
+            # `setattr`, so the type checker (which does not see the patched
+            # visitor on the third-party class) stays happy.
+            setattr(visitor, "visit_Attribute", visit_Attribute)
 
 
 # ---------------------------------------------------------------------------
@@ -391,13 +407,15 @@ class Printer:
     def render(cls, key, name, value):
         """Phase 2: the text that replaces one name occurrence.
 
-        Modules, functions, methods, built-ins and classes are *not* expanded:
-        they keep the name used in the source (so ``math.sqrt`` stays
-        ``math.sqrt``, ``f`` stays ``f``, ``int`` stays ``int``) instead of
-        dumping an opaque ``<…>`` repr. Everything else is shown by
-        :meth:`text`.
+        Modules, functions, methods, built-ins, classes and other callables are
+        *not* expanded: they keep the name used in the source (so ``math.sqrt``
+        stays ``math.sqrt``, ``f`` stays ``f``, ``int`` stays ``int``, an
+        attribute holding a function such as ``np.sin`` stays ``np.sin``)
+        instead of dumping an opaque ``<…>`` repr. Everything else is shown by
+        :meth:`text` -- including a dotted attribute chain such as
+        ``me.H.atomic_number``, whose value becomes the plain number.
         """
-        if isinstance(value, cls.OPAQUE_TYPES):
+        if isinstance(value, cls.OPAQUE_TYPES) or callable(value):
             return name
         return cls.text(key, value)
 
@@ -494,7 +512,9 @@ class Source:
         """Build ``(template, names)`` from the exact source `segment` of `node`.
 
         Every loaded name occurrence inside `segment` becomes a positional
-        ``{}`` placeholder; `names` lists those occurrences in source order.
+        ``{}`` placeholder; `names` lists those occurrences in source order. A
+        dotted chain rooted at a name (``me.H.atomic_number``) is one occurrence
+        -- the whole chain -- so its value is substituted as a unit.
         """
         start = self._offset(node.lineno, node.col_offset)
         raw = segment.encode("utf-8")
@@ -502,8 +522,7 @@ class Source:
             (self._offset(n.lineno, n.col_offset) - start,
              self._offset(n.end_lineno, n.end_col_offset) - start,
              n)
-            for n in ast.walk(node)
-            if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+            for n in self._occurrences(node)
         )
 
         pieces = []
@@ -516,6 +535,38 @@ class Source:
             cursor = e
         pieces.append(self._escape_braces(raw[cursor:].decode("utf-8")))
         return "".join(pieces), names
+
+    @staticmethod
+    def _occurrences(node):
+        """The occurrences to substitute: loaded names and dotted chains.
+
+        A plain loaded ``Name`` is one occurrence. A dotted chain rooted at a
+        name (``me.H.atomic_number``) is *one* occurrence -- the whole chain --
+        so both its prefixes (``me.H``) and its root ``Name`` (``me``) are left
+        out: they are contained in the chain and would overlap it. Chains whose
+        root is not a bare name (``f(x).attr``) are left alone, so the call is
+        not evaluated an extra time.
+        """
+        chains = [
+            n for n in ast.walk(node)
+            if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Load)
+            and Source._attribute_root(n) is not None
+        ]
+        inner = {id(n.value) for n in chains if isinstance(n.value, ast.Attribute)}
+        roots = {id(Source._attribute_root(n)) for n in chains}
+        names = [
+            n for n in ast.walk(node)
+            if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+            and id(n) not in roots
+        ]
+        return names + [n for n in chains if id(n) not in inner]
+
+    @staticmethod
+    def _attribute_root(node):
+        """The ``Name`` at the root of a dotted chain, or ``None`` if there is none."""
+        while isinstance(node, ast.Attribute):
+            node = node.value
+        return node if isinstance(node, ast.Name) else None
 
     def _offset(self, lineno, col_offset):
         """Absolute UTF-8 byte offset of `(lineno, col_offset)` in the source."""
@@ -588,8 +639,16 @@ class Expander:
 
     @staticmethod
     def _rendered_arg(key, name_node):
-        """AST for ``Printer.render(<key>, "<name>", <name>)``, hygienically bound."""
-        return q[h[Printer].render(u[key], u[name_node.id], a[name_node])]
+        """AST for ``Printer.render(<key>, "<name>", <name>)``, hygienically bound.
+
+        The ``<name>`` string is the identifier for a plain name, or the dotted
+        text for an attribute chain (``me.H.atomic_number``).
+        """
+        if isinstance(name_node, ast.Attribute):
+            name = ast.unparse(name_node)
+        else:
+            name = name_node.id
+        return q[h[Printer].render(u[key], u[name], a[name_node])]
 
     @staticmethod
     def collect(*values):

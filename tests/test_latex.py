@@ -172,6 +172,40 @@ def test_pytexit_multiplier_does_not_glue_tokens():
     assert r"{\cdot}" in tex
 
 
+def test_pytexit_renders_dotted_attributes():
+    # Regression: pytexit has no `visit_Attribute`, so a dotted line used to hit
+    # its broken `generic_visit` and fall back to plain text in LaTeX mode.
+    pytest.importorskip("pytexit")
+    mathprint_main.Latex._patch_pytexit()
+    from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
+
+    tex = py2tex(
+        "me.H.atomic_number",
+        print_latex=False,
+        print_formula=False,
+        tex_multiplier=r"{\cdot}",
+        simplify_output=False,
+        simplify_multipliers=False,
+    )
+    assert "me.H" in tex
+    assert "atomic" in tex
+
+
+def test_display_latex_handles_dotted_attribute(capsys, monkeypatch):
+    pytest.importorskip("pytexit")
+    import IPython.display as ipython_display
+    from IPython.display import Latex
+
+    calls = []
+    monkeypatch.setattr(ipython_display, "display", lambda obj: calls.append(obj))
+
+    mathprint_main.Latex.show("me.H.atomic_number")
+
+    assert len(calls) == 1         # rendered as LaTeX, not printed as plain text
+    assert isinstance(calls[0], Latex)
+    assert capsys.readouterr().out == ""
+
+
 def test_display_latex_shows_a_latex_object(monkeypatch):
     pytest.importorskip("pytexit")
     import IPython.display as ipython_display

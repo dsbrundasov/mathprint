@@ -77,11 +77,15 @@ mpt[y > (a + z) * 2]
   [Several expressions in one call](#several-expressions-in-one-call).
 - All comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, `is`, `in`, …) and
   chained comparisons (`0 < y < z`).
-- Only **names** are substituted; functions and attributes are not evaluated.
-  Assignment targets (e.g. the name left of `:=`) are not substituted.
+- Only **names** and **dotted attribute chains rooted at a name** are
+  substituted (`me.H.atomic_number`). Assignment targets (e.g. the name left of
+  `:=`) are not substituted.
 - Module, function and class names are **not** expanded: `math.floor(y)` stays
   `math.floor(5)` (not `<module 'math' …>.floor(5)`), `f(y)` stays `f(5)` (not
   `<function f at 0x…>(5)`), and `int(y)` stays `int(5)` (not `<class 'int'>(5)`).
+  The same applies to any other callable, and to attribute chains whose value is
+  a module/function/class/callable — but a chain that resolves to a plain value
+  is substituted: `me.H.atomic_number` prints as `1`.
 - Works under both `python` and `macropython`.
 - Optional **one-line layout**: `mpt.to_line()` joins the three phases into a
   single line — `x = 3 + y = 3 + 5 = 8` — per file. A column of lines is the
@@ -376,6 +380,11 @@ frontend (Jupyter); outside IPython, `display` falls back to a plain repr.
 > literals on Python >= 3.8. mathprint patches in the missing visitor
 > automatically — only in LaTeX mode, and only if it is absent.
 
+> **Dotted names.** `pytexit` 0.4.0 also has no visitor for attribute access
+> (`me.H.atomic_number`), so such a line used to fall back to plain text.
+> mathprint patches in `visit_Attribute` too, rendering the chain as
+> `me.H.atomic_{number}`.
+
 A complete example notebook is in
 [examples/demo_latex.ipynb](examples/demo_latex.ipynb).
 
@@ -456,8 +465,10 @@ A complete example is in [examples/demo_stub.py](examples/demo_stub.py).
    verbatim from the source file (no reformatting, no added/removed spaces or
    parentheses).
 2. **Substitution.** The same expression with each local variable replaced
-   *in place* by its current value. Nothing is evaluated or simplified here; only
-   names are textually substituted, and their order is preserved exactly.
+   *in place* by its current value (a dotted chain rooted at a name, such as
+   `me.H.atomic_number`, is treated as one variable). Nothing is evaluated or
+   simplified here; only names are textually substituted, and their order is
+   preserved exactly.
 3. **Evaluation.** The expression itself is evaluated once; its value is printed
    as the third line (with the `name := ` prefix in the assignment form, so all
    three lines carry the name) and also becomes the value of the macro, so it can
@@ -476,8 +487,10 @@ A complete example is in [examples/demo_stub.py](examples/demo_stub.py).
 The substituted line is built directly from the exact source substring of the
 expression. Each *loaded* name occurrence is replaced in place by a positional
 `str.format` placeholder, and occurrences are collected in source order (by byte
-offset in the file), then sorted by that offset. Placeholders are filled
-positionally with the values of those very same occurrences. Because the i-th
+offset in the file), then sorted by that offset. A dotted chain rooted at a name
+(`me.H.atomic_number`) counts as one occurrence — its prefixes and root are not
+separate slots. Placeholders are filled positionally with the values of those
+very same occurrences. Because the i-th
 placeholder is by construction the i-th source occurrence, the i-th value
 necessarily lands in the i-th slot — regardless of the surrounding operators
 (including comparisons) and regardless of what the values are (numbers, sympy
