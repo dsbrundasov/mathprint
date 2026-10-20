@@ -191,6 +191,60 @@ def test_pytexit_renders_dotted_attributes():
     assert "atomic" in tex
 
 
+def test_pytexit_keeps_every_multiplication_sign():
+    # Regression: pytexit's `visit_Mult` returns a space and its `Mult` branch
+    # switched to `tex_multiplier` only for float-literal operands, so
+    # `2 * (0.07 * m)` rendered as `2 0.07\cdot m` -- a different formula.
+    pytest.importorskip("pytexit")
+    mathprint_main.Latex._patch_pytexit()
+    from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
+
+    tex = py2tex(
+        "M * 2 * (0.07 * m) / P",
+        print_latex=False,
+        print_formula=False,
+        tex_multiplier=r"{\cdot}",
+        simplify_output=False,
+        simplify_multipliers=False,
+    )
+    assert "2 0.07" not in tex
+    assert tex.count(r"{\cdot}") == 3   # M*2, 2*(...), 0.07*m
+
+
+def test_pytexit_keeps_explicit_times_one():
+    pytest.importorskip("pytexit")
+    mathprint_main.Latex._patch_pytexit()
+    from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
+
+    tex = py2tex(
+        "1 * x",
+        print_latex=False,
+        print_formula=False,
+        tex_multiplier=r"{\cdot}",
+        simplify_output=False,
+        simplify_multipliers=False,
+    )
+    assert r"1{\cdot}x" in tex
+
+
+def test_latex_mode_keeps_multiplication_end_to_end(monkeypatch):
+    pytest.importorskip("pytexit")
+    import IPython.display as ipython_display
+
+    calls = []
+    monkeypatch.setattr(ipython_display, "display", lambda obj: calls.append(obj))
+
+    mpt.latex()
+    a = 2
+    b = 0.07
+    mpt[a * (b * 3)]
+
+    assert len(calls) == 3
+    substituted = calls[1].data
+    assert "2 0.07" not in substituted
+    assert substituted.count(r"{\cdot}") == 2
+
+
 def test_display_latex_handles_dotted_attribute(capsys, monkeypatch):
     pytest.importorskip("pytexit")
     import IPython.display as ipython_display

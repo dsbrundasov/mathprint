@@ -242,15 +242,19 @@ class Latex:
 
     @staticmethod
     def _patch_pytexit():
-        """Teach ``pytexit`` to render literals and dotted attributes.
+        """Teach ``pytexit`` to render literals, dotted attributes and products.
 
-        ``pytexit`` 0.4.0 has two gaps that make a line silently fall back to
+        ``pytexit`` 0.4.0 has three gaps. Two make a line silently fall back to
         plain text: it only defines ``visit_Num`` (Python >= 3.8 numeric
         literals parse to ``ast.Constant``, which lands on the buggy
         ``generic_visit`` and raises), and it has no ``visit_Attribute`` at all,
-        so any dotted access (``me.H.atomic_number``) fails the same way. Both
-        visitors are added (a no-op on fixed versions). Only invoked in LaTeX
-        mode, so the default plain-text path never touches ``pytexit``.
+        so any dotted access (``me.H.atomic_number``) fails the same way. The
+        third changes the meaning: ``visit_Mult`` returns a space, and the
+        multiplication path only uses ``tex_multiplier`` when an operand looks
+        like a float literal, so ``2 * (0.07 * m)`` becomes ``2 0.07\\cdot m``.
+        All three are fixed here (a no-op on patched versions, except the
+        multiplier which is always made explicit). Only invoked in LaTeX mode,
+        so the default plain-text path never touches ``pytexit``.
         """
         try:
             from pytexit.core import core  # pyright: ignore[reportMissingModuleSource]
@@ -283,6 +287,16 @@ class Latex:
             # `setattr`, so the type checker (which does not see the patched
             # visitor on the third-party class) stays happy.
             setattr(visitor, "visit_Attribute", visit_Attribute)
+
+        # Always show multiplication explicitly. pytexit's `visit_Mult` returns
+        # a space (implicit multiplication), and its `Mult` branch only switches
+        # to `tex_multiplier` when one operand looks like a float *literal* --
+        # so `2 * (0.07 * m)` renders as `2 0.07\cdot m`, silently changing the
+        # formula. Return the configured multiplier for every `Mult` instead.
+        def visit_Mult(self, n):
+            return self.tex_multiplier
+
+        setattr(visitor, "visit_Mult", visit_Mult)
 
 
 # ---------------------------------------------------------------------------

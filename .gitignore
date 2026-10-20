@@ -17,11 +17,14 @@
 !/examples/**
 !/.vscode/
 !/.vscode/**
+!/docs/
+!/docs/**
 
 # Build and cache artifacts (these override the allowlist rules above).
 __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.ipynb_checkpoints/
 build/
 dist/

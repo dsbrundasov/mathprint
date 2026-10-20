@@ -385,6 +385,11 @@ frontend (Jupyter); outside IPython, `display` falls back to a plain repr.
 > mathprint patches in `visit_Attribute` too, rendering the chain as
 > `me.H.atomic_{number}`.
 
+> **Multiplication.** `pytexit` 0.4.0 renders `*` as a space and only uses the
+> configured multiplier when an operand looks like a float literal, so
+> `2 * (0.07 * m)` became `2 0.07\cdot m` — a different formula. mathprint makes
+> every product explicit: `*` always renders as `{\cdot}` (`2{\cdot}0.07{\cdot}m`).
+
 A complete example notebook is in
 [examples/demo_latex.ipynb](examples/demo_latex.ipynb).
 
@@ -563,6 +568,10 @@ Tests run with `--assert=plain` (see `[tool.pytest.ini_options]` in
 `pyproject.toml`), because pytest's assertion rewriting bypasses mcpyrate's
 macro-expansion hook.
 
+For a step-by-step walkthrough of one formula — from `mpt[...]` through macro
+expansion and substitution to the final LaTeX (in Russian) — see
+[docs/execution-path.md](docs/execution-path.md).
+
 ---
 
 ## Project structure
@@ -571,6 +580,8 @@ macro-expansion hook.
 pyproject.toml              # package metadata and build config
 README.md                   # this file
 pyrightconfig.json          # Pyright/Pylance settings
+docs/
+  execution-path.md         # step-by-step execution path of one formula (RU)
 src/
   mathprint/                # helper module (one-liner bootstrap) + no-op stub
     __init__.py
