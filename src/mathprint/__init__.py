@@ -60,8 +60,10 @@ __all__ = ["is_active", "mpt"]
 
 if TYPE_CHECKING:
     # ``mpt`` exists for type checkers; at run time it is provided lazily by the
-    # module-level ``__getattr__`` below.
-    mpt: Any
+    # module-level ``__getattr__`` below. Re-exporting ``mathprint_main.mpt``
+    # (rather than ``Any``) is what gives hover documentation for
+    # ``mpt[...]`` / ``mpt.configure(...)`` in the editor.
+    from mathprint_main import mpt
 
 
 def is_active():

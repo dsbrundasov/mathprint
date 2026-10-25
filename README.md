@@ -215,7 +215,10 @@ Both ways work; pick whichever fits.
 ### Pylance / Pyright
 
 The package ships `py.typed` and `__init__.pyi`, so `mpt[...]` is not flagged as
-an error and Pylance understands the macro-call syntax.
+an error and Pylance understands the macro-call syntax. The stub also describes
+`mpt.configure(...)` in full (signature, allowed values and per-argument
+documentation), so hovering over `mpt.configure` in VS Code shows the settings
+and what each argument does.
 
 ---
 
@@ -587,7 +590,10 @@ Store-context names (e.g. a comprehension target, or the target of an assignment
 ## Pylance / Pyright
 
 The package ships `py.typed` and `__init__.pyi`, so `mpt[...]` is not flagged as
-an error and Pylance understands the macro-call syntax.
+an error and Pylance understands the macro-call syntax. The stub also describes
+`mpt.configure(...)` in full (signature, allowed values and per-argument
+documentation), so hovering over `mpt.configure` in VS Code shows the settings
+and what each argument does.
 
 ---
 

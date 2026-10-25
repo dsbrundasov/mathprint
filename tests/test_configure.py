@@ -149,13 +149,13 @@ def test_values_can_be_restored():
 
 def test_rejects_unknown_out_order():
     with pytest.raises(ValueError, match="out_order"):
-        mpt.configure(out_order="rows")
+        mpt.configure(out_order="rows")  # pyright: ignore[reportArgumentType]
     assert not mathprint_main.Printer.line_on(_HERE)
 
 
 def test_rejects_unknown_out_format():
     with pytest.raises(ValueError, match="out_format"):
-        mpt.configure(out_format="html")
+        mpt.configure(out_format="html")  # pyright: ignore[reportArgumentType]
     assert not mathprint_main.Printer.latex_on(_HERE)
 
 

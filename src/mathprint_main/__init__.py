@@ -774,15 +774,33 @@ _UNSET = object()
 
 def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET,
                multiple_assignment_reduce=_UNSET):
-    """Back ``mpt.configure(...)``: set display options for the calling file.
+    """Change the display settings for the file (or notebook) this is called in.
 
-    Every argument is optional; an argument that is omitted is left unchanged.
-    ``out_order`` is ``"column"`` (default) or ``"line"``; ``out_format`` is
-    ``"text"`` (default) or ``"latex"``; ``precision`` is a number of displayed
-    significant digits, or ``None`` to restore the default;
-    ``multiple_assignment_reduce=True`` collapses a chain such as
-    ``ro1 := (ro := (c := 2230))`` to ``ro1 := 2230`` in phase 2 (phase 1 keeps
-    the chain). Returns the scope key that was affected.
+    The settings apply to every ``mpt[...]`` in the calling scope -- the file,
+    or the whole notebook in Jupyter -- and never leak into other modules. Every
+    argument is optional: an omitted argument is left unchanged.
+
+    Args:
+        out_order: ``"column"`` (default) shows the three phases on separate
+            lines; ``"line"`` joins them into one, with the name appearing once,
+            e.g. ``x = 3 + y = 3 + 5 = 8``.
+        out_format: ``"text"`` (default) prints plain text; ``"latex"`` renders
+            each line with ``pytexit`` + ``IPython.display`` (Jupyter).
+        precision: Number of significant digits shown for plain numbers: ``4``
+            shows ``3.123123412`` as ``3.123``. Only the display is rounded --
+            the expression is still evaluated and returned at full precision.
+            ``None`` restores the default.
+        multiple_assignment_reduce: ``True`` collapses a nested assignment chain
+            such as ``ro1 := (ro := (c := 2230))`` to ``ro1 := 2230`` in the
+            substitution phase (phase 1 still shows the chain as written).
+            Default ``False``.
+
+    Returns:
+        The scope key that changed: the file's absolute path, or ``"<ipython>"``
+        in a notebook.
+
+    Raises:
+        ValueError: If a value is not one of the allowed ones.
     """
     key = Printer.key_of_globals(sys._getframe(1).f_globals)
     if out_order is not _UNSET:

@@ -4,13 +4,71 @@
 checkers would otherwise report as subscripting a function.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 class _Macro:
-    def __getitem__(self, item: Any) -> Any: ...
-    # `mpt.configure(...)` groups the per-file display settings:
-    # `out_order="column" | "line"`, `out_format="text" | "latex"`, `precision=n`.
-    configure: Any
+    """The ``mpt`` macro.
+
+    Invoke it as ``mpt[expression]``; configure it with ``mpt.configure(...)``.
+    """
+
+    def __getitem__(self, item: Any) -> Any:
+        """Print ``mpt[expression]`` in three phases and return its value.
+
+        The three phases are the source exactly as written, the source with each
+        variable replaced by its current value, and the computed value. The
+        expression is evaluated exactly once.
+
+        The assignment form ``mpt[name := expression]`` also binds ``name`` and
+        prefixes the output with it. Several items (``mpt[a, b]``) are shown in
+        order and yield a tuple of the values.
+        """
+        ...
+
+    def configure(
+        self,
+        *,
+        out_order: Literal["column", "line"] = ...,
+        out_format: Literal["text", "latex"] = ...,
+        precision: int | None = ...,
+        multiple_assignment_reduce: bool = ...,
+    ) -> str:
+        """Change the display settings for the file (or notebook) this is called in.
+
+        The settings apply to every ``mpt[...]`` in the calling scope -- the
+        file, or the whole notebook in Jupyter -- and never leak into other
+        modules. Every argument is optional: an omitted argument is left
+        unchanged.
+
+        Args:
+            out_order: ``"column"`` (default) shows the three phases on separate
+                lines; ``"line"`` joins them into one, with the name appearing
+                once, e.g. ``x = 3 + y = 3 + 5 = 8``.
+            out_format: ``"text"`` (default) prints plain text; ``"latex"``
+                renders each line with ``pytexit`` + ``IPython.display``
+                (Jupyter).
+            precision: Number of significant digits shown for plain numbers:
+                ``4`` shows ``3.123123412`` as ``3.123``. Only the display is
+                rounded -- the expression is still evaluated and returned at
+                full precision. ``None`` restores the default.
+            multiple_assignment_reduce: ``True`` collapses a nested assignment
+                chain such as ``ro1 := (ro := (c := 2230))`` to ``ro1 := 2230``
+                in the substitution phase (phase 1 still shows the chain as
+                written). Default ``False``.
+
+        Returns:
+            The scope key that changed: the file's absolute path, or
+            ``"<ipython>"`` in a notebook.
+
+        Raises:
+            ValueError: If a value is not one of the allowed ones.
+
+        Example:
+            ```python
+            mpt.configure(out_order="line", out_format="latex", precision=4)
+            ```
+        """
+        ...
 
 mpt: _Macro
 
