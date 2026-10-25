@@ -32,6 +32,7 @@ class _Macro:
         out_format: Literal["text", "latex"] = ...,
         precision: int | None = ...,
         multiple_assignment_reduce: bool = ...,
+        reduce_equ_stages: bool = ...,
     ) -> str:
         """Change the display settings for the file (or notebook) this is called in.
 
@@ -55,6 +56,10 @@ class _Macro:
                 chain such as ``ro1 := (ro := (c := 2230))`` to ``ro1 := 2230``
                 in the substitution phase (phase 1 still shows the chain as
                 written). Default ``False``.
+            reduce_equ_stages: ``True`` drops repeated adjacent stages from a
+                one-line result: ``ro1 = (ro := (...)) = 2230 = 2230`` becomes
+                ``ro1 = (ro := (...)) = 2230``. Has no effect in column mode.
+                Default ``False``.
 
         Returns:
             The scope key that changed: the file's absolute path, or
@@ -93,6 +98,7 @@ class Printer:
     latex_scopes: set[str]
     precision_scopes: dict[str, int]
     multiple_assignment_reduce_scopes: set[str]
+    reduce_equ_stages_scopes: set[str]
     OPAQUE_TYPES: tuple[type, ...]
     @classmethod
     def key_of(cls, filename: Any) -> str: ...
@@ -107,6 +113,8 @@ class Printer:
     @classmethod
     def set_multiple_assignment_reduce(cls, key: str, on: bool = ...) -> str: ...
     @classmethod
+    def set_reduce_equ_stages(cls, key: str, on: bool = ...) -> str: ...
+    @classmethod
     def line_on(cls, key: str) -> bool: ...
     @classmethod
     def latex_on(cls, key: str) -> bool: ...
@@ -114,6 +122,8 @@ class Printer:
     def precision_of(cls, key: str) -> int | None: ...
     @classmethod
     def multiple_assignment_reduce_on(cls, key: str) -> bool: ...
+    @classmethod
+    def reduce_equ_stages_on(cls, key: str) -> bool: ...
     @classmethod
     def render(cls, key: str, name: str, value: Any) -> str: ...
     @classmethod
@@ -149,4 +159,5 @@ def _configure(
     out_format: str = ...,
     precision: int | None = ...,
     multiple_assignment_reduce: bool = ...,
+    reduce_equ_stages: bool = ...,
 ) -> str: ...

@@ -99,6 +99,8 @@ value; ``precision=None`` restores the default.
 ``multiple_assignment_reduce=True`` collapses a chain of assignments (e.g.
 ``ro1 := (ro := (ro_БФСС := 2230))``) to the value of the innermost assignment in
 phase 2 (``ro1 := 2230``); phase 1 still shows the chain as written.
+``reduce_equ_stages=True`` drops repeated adjacent stages from a one-line result
+(``ro1 = (ro := (...)) = 2230 = 2230`` becomes ``ro1 = (ro := (...)) = 2230``).
 ``mpt.configure(...)`` returns the scope key it changed.
 
 **How the code is laid out.** The work is a short pipeline of single-purpose
@@ -316,11 +318,14 @@ class Printer:
     * the display precision -- full, or ``n`` significant digits
       (``mpt.configure(precision=n)``), and
     * whether phase 2 collapses a nested assignment chain
-      (``mpt.configure(multiple_assignment_reduce=True)``).
+      (``mpt.configure(multiple_assignment_reduce=True)``), and
+    * whether a one-line result drops repeated stages
+      (``mpt.configure(reduce_equ_stages=True)``).
 
     So the settings never leak between files. They live in :attr:`line_scopes`,
-    :attr:`latex_scopes`, :attr:`precision_scopes` and
-    :attr:`multiple_assignment_reduce_scopes`; the ``key_of*`` methods
+    :attr:`latex_scopes`, :attr:`precision_scopes`,
+    :attr:`multiple_assignment_reduce_scopes` and
+    :attr:`reduce_equ_stages_scopes`; the ``key_of*`` methods
     map a file or a live module to a scope key; and :meth:`render`, :meth:`text`,
     :meth:`emit` and :meth:`show` are the runtime hooks the expanded code calls
     (see :class:`Expander`).
@@ -341,6 +346,10 @@ class Printer:
     #: Scope keys whose phase 2 collapses a nested assignment chain to the value
     #: of the innermost assignment (see ``multiple_assignment_reduce=True``).
     multiple_assignment_reduce_scopes = set()
+
+    #: Scope keys whose one-line output drops repeated stages
+    #: (see ``reduce_equ_stages=True``).
+    reduce_equ_stages_scopes = set()
 
     #: Values whose ``str`` repr is noise (``<function f at 0x…>``,
     #: ``<class 'int'>``, ``<module 'math' …>``). For these, phase 2 keeps the
@@ -420,6 +429,15 @@ class Printer:
         return key
 
     @classmethod
+    def set_reduce_equ_stages(cls, key, on=True):
+        """Enable (or disable) dropping repeated one-line stages for `key`."""
+        if on:
+            cls.reduce_equ_stages_scopes.add(key)
+        else:
+            cls.reduce_equ_stages_scopes.discard(key)
+        return key
+
+    @classmethod
     def line_on(cls, key):
         """Whether `key` (or every file, via ``ANY_FILE``) uses one-line layout."""
         return cls.ANY_FILE in cls.line_scopes or key in cls.line_scopes
@@ -440,6 +458,14 @@ class Printer:
         return (
             cls.ANY_FILE in cls.multiple_assignment_reduce_scopes
             or key in cls.multiple_assignment_reduce_scopes
+        )
+
+    @classmethod
+    def reduce_equ_stages_on(cls, key):
+        """Whether `key` drops repeated stages from a one-line result."""
+        return (
+            cls.ANY_FILE in cls.reduce_equ_stages_scopes
+            or key in cls.reduce_equ_stages_scopes
         )
 
     # --- the runtime hooks (called by the expanded code) --------------------
@@ -499,7 +525,9 @@ class Printer:
         joined (``x = 3 + y = 3 + 5 = 8``), the name appearing once. ``name`` is
         the assignment target (``""`` for a bare expression) and ``source`` /
         ``substituted`` already contain the name, so the joined line just drops
-        it (everything up to the first ``:=``).
+        it (everything up to the first ``:=``). With ``reduce_equ_stages=True``
+        adjacent equal stages are collapsed, so ``... = 2230 = 2230`` becomes
+        ``... = 2230``.
         """
         shown = cls.text(key, value)
         if cls.line_on(key):
@@ -507,12 +535,29 @@ class Printer:
                 source = source.split(":=", 1)[1].strip()
                 substituted = substituted.split(":=", 1)[1].strip()
             joiner = " == " if cls.latex_on(key) else " = "
-            cls.emit(key, joiner.join(([name] if name else []) + [source, substituted, shown]))
+            parts = ([name] if name else []) + [source, substituted, shown]
+            if cls.reduce_equ_stages_on(key):
+                parts = cls._without_repeated_stages(parts)
+            cls.emit(key, joiner.join(parts))
         else:
             cls.emit(key, source)
             cls.emit(key, substituted)
             cls.emit(key, f"{name} := {shown}" if name else shown)
         return value
+
+    @staticmethod
+    def _without_repeated_stages(parts):
+        """Drop adjacent equal parts, keeping the first of each run.
+
+        Used only for one-line output when ``reduce_equ_stages=True``: a chain
+        such as ``ro1 = (ro := (...)) = 2230 = 2230`` becomes
+        ``ro1 = (ro := (...)) = 2230``.
+        """
+        reduced = []
+        for part in parts:
+            if not reduced or reduced[-1] != part:
+                reduced.append(part)
+        return reduced
 
 
 # ---------------------------------------------------------------------------
@@ -773,7 +818,7 @@ _UNSET = object()
 
 
 def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET,
-               multiple_assignment_reduce=_UNSET):
+               multiple_assignment_reduce=_UNSET, reduce_equ_stages=_UNSET):
     """Change the display settings for the file (or notebook) this is called in.
 
     The settings apply to every ``mpt[...]`` in the calling scope -- the file,
@@ -793,6 +838,10 @@ def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET,
         multiple_assignment_reduce: ``True`` collapses a nested assignment chain
             such as ``ro1 := (ro := (c := 2230))`` to ``ro1 := 2230`` in the
             substitution phase (phase 1 still shows the chain as written).
+            Default ``False``.
+        reduce_equ_stages: ``True`` drops repeated adjacent stages from a
+            one-line result: ``ro1 = (ro := (...)) = 2230 = 2230`` becomes
+            ``ro1 = (ro := (...)) = 2230``. Has no effect in column mode.
             Default ``False``.
 
     Returns:
@@ -823,6 +872,12 @@ def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET,
                 "mpt.configure(multiple_assignment_reduce=...) expects True or False"
             )
         Printer.set_multiple_assignment_reduce(key, multiple_assignment_reduce)
+    if reduce_equ_stages is not _UNSET:
+        if not isinstance(reduce_equ_stages, bool):
+            raise ValueError(
+                "mpt.configure(reduce_equ_stages=...) expects True or False"
+            )
+        Printer.set_reduce_equ_stages(key, reduce_equ_stages)
     return key
 
 

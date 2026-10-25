@@ -24,11 +24,13 @@ def restore_settings():
         set(mathprint_main.Printer.latex_scopes),
         dict(mathprint_main.Printer.precision_scopes),
         set(mathprint_main.Printer.multiple_assignment_reduce_scopes),
+        set(mathprint_main.Printer.reduce_equ_stages_scopes),
     )
     mathprint_main.Printer.line_scopes.clear()
     mathprint_main.Printer.latex_scopes.clear()
     mathprint_main.Printer.precision_scopes.clear()
     mathprint_main.Printer.multiple_assignment_reduce_scopes.clear()
+    mathprint_main.Printer.reduce_equ_stages_scopes.clear()
     yield
     mathprint_main.Printer.line_scopes.clear()
     mathprint_main.Printer.line_scopes.update(saved[0])
@@ -38,6 +40,8 @@ def restore_settings():
     mathprint_main.Printer.precision_scopes.update(saved[2])
     mathprint_main.Printer.multiple_assignment_reduce_scopes.clear()
     mathprint_main.Printer.multiple_assignment_reduce_scopes.update(saved[3])
+    mathprint_main.Printer.reduce_equ_stages_scopes.clear()
+    mathprint_main.Printer.reduce_equ_stages_scopes.update(saved[4])
 
 
 # --- Defaults ---------------------------------------------------------------
@@ -47,6 +51,7 @@ def test_defaults():
     assert not mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) is None
     assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
+    assert not mathprint_main.Printer.reduce_equ_stages_on(_HERE)
 
 
 # --- Grouped call -----------------------------------------------------------
@@ -61,11 +66,13 @@ def test_applies_several_options_at_once():
         out_format="latex",
         precision=4,
         multiple_assignment_reduce=True,
+        reduce_equ_stages=True,
     ) == _HERE
     assert mathprint_main.Printer.line_on(_HERE)
     assert mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) == 4
     assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
+    assert mathprint_main.Printer.reduce_equ_stages_on(_HERE)
 
 
 def test_no_arguments_changes_nothing():
@@ -74,12 +81,14 @@ def test_no_arguments_changes_nothing():
         out_format="latex",
         precision=4,
         multiple_assignment_reduce=True,
+        reduce_equ_stages=True,
     )
     assert mpt.configure() == _HERE
     assert mathprint_main.Printer.line_on(_HERE)
     assert mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) == 4
     assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
+    assert mathprint_main.Printer.reduce_equ_stages_on(_HERE)
 
 
 # --- Omitted options stay unchanged ----------------------------------------
@@ -90,12 +99,14 @@ def test_omitted_option_stays_unchanged():
         out_format="latex",
         precision=4,
         multiple_assignment_reduce=True,
+        reduce_equ_stages=True,
     )
     mpt.configure(precision=2)
     assert mathprint_main.Printer.line_on(_HERE)
     assert mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) == 2
     assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
+    assert mathprint_main.Printer.reduce_equ_stages_on(_HERE)
 
 
 def test_each_option_can_be_set_alone():
@@ -104,24 +115,35 @@ def test_each_option_can_be_set_alone():
     assert not mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) is None
     assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
+    assert not mathprint_main.Printer.reduce_equ_stages_on(_HERE)
 
     mpt.configure(out_format="latex")
     assert mathprint_main.Printer.line_on(_HERE)
     assert mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) is None
     assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
+    assert not mathprint_main.Printer.reduce_equ_stages_on(_HERE)
 
     mpt.configure(precision=4)
     assert mathprint_main.Printer.line_on(_HERE)
     assert mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) == 4
     assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
+    assert not mathprint_main.Printer.reduce_equ_stages_on(_HERE)
 
     mpt.configure(multiple_assignment_reduce=True)
     assert mathprint_main.Printer.line_on(_HERE)
     assert mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) == 4
     assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
+    assert not mathprint_main.Printer.reduce_equ_stages_on(_HERE)
+
+    mpt.configure(reduce_equ_stages=True)
+    assert mathprint_main.Printer.line_on(_HERE)
+    assert mathprint_main.Printer.latex_on(_HERE)
+    assert mathprint_main.Printer.precision_of(_HERE) == 4
+    assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
+    assert mathprint_main.Printer.reduce_equ_stages_on(_HERE)
 
 
 # --- Turning options back off ----------------------------------------------
@@ -132,17 +154,20 @@ def test_values_can_be_restored():
         out_format="latex",
         precision=4,
         multiple_assignment_reduce=True,
+        reduce_equ_stages=True,
     )
     mpt.configure(
         out_order="column",
         out_format="text",
         precision=None,
         multiple_assignment_reduce=False,
+        reduce_equ_stages=False,
     )
     assert not mathprint_main.Printer.line_on(_HERE)
     assert not mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) is None
     assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
+    assert not mathprint_main.Printer.reduce_equ_stages_on(_HERE)
 
 
 # --- Validation -------------------------------------------------------------
@@ -169,6 +194,12 @@ def test_rejects_non_bool_multiple_assignment_reduce():
     with pytest.raises(ValueError, match="multiple_assignment_reduce"):
         mpt.configure(multiple_assignment_reduce="yes")  # pyright: ignore[reportArgumentType]
     assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
+
+
+def test_rejects_non_bool_reduce_equ_stages():
+    with pytest.raises(ValueError, match="reduce_equ_stages"):
+        mpt.configure(reduce_equ_stages="yes")  # pyright: ignore[reportArgumentType]
+    assert not mathprint_main.Printer.reduce_equ_stages_on(_HERE)
 
 
 def test_rejects_positional_arguments():

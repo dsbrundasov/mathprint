@@ -47,8 +47,9 @@ Display options are grouped in ``mpt.configure(...)``, which applies to the file
 ``out_order`` is ``"column"`` (default) or ``"line"``; ``out_format`` is
 ``"text"`` (default) or ``"latex"``; ``precision`` is a number of significant
 digits (or ``None`` to restore the default); ``multiple_assignment_reduce=True``
-collapses a nested assignment chain in the substitution phase. Omitted arguments
-are left unchanged.
+collapses a nested assignment chain in the substitution phase;
+``reduce_equ_stages=True`` drops repeated adjacent stages from a one-line result.
+Omitted arguments are left unchanged.
 """
 
 import os
