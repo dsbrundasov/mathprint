@@ -1,8 +1,9 @@
 """Tests for the grouped display settings (``mpt.configure(...)``).
 
-All three settings -- layout (``out_order``), format (``out_format``) and display
-precision (``precision``) -- are changed through one call, scoped to the file (or
-notebook) it appears in. Omitted arguments must be left unchanged.
+All settings -- layout (``out_order``), format (``out_format``), display
+precision (``precision``) and nested-assignment collapsing
+(``multiple_assignment_reduce``) -- are changed through one call, scoped to the
+file (or notebook) it appears in. Omitted arguments must be left unchanged.
 """
 
 import os
@@ -22,10 +23,12 @@ def restore_settings():
         set(mathprint_main.Printer.line_scopes),
         set(mathprint_main.Printer.latex_scopes),
         dict(mathprint_main.Printer.precision_scopes),
+        set(mathprint_main.Printer.multiple_assignment_reduce_scopes),
     )
     mathprint_main.Printer.line_scopes.clear()
     mathprint_main.Printer.latex_scopes.clear()
     mathprint_main.Printer.precision_scopes.clear()
+    mathprint_main.Printer.multiple_assignment_reduce_scopes.clear()
     yield
     mathprint_main.Printer.line_scopes.clear()
     mathprint_main.Printer.line_scopes.update(saved[0])
@@ -33,6 +36,8 @@ def restore_settings():
     mathprint_main.Printer.latex_scopes.update(saved[1])
     mathprint_main.Printer.precision_scopes.clear()
     mathprint_main.Printer.precision_scopes.update(saved[2])
+    mathprint_main.Printer.multiple_assignment_reduce_scopes.clear()
+    mathprint_main.Printer.multiple_assignment_reduce_scopes.update(saved[3])
 
 
 # --- Defaults ---------------------------------------------------------------
@@ -41,6 +46,7 @@ def test_defaults():
     assert not mathprint_main.Printer.line_on(_HERE)
     assert not mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) is None
+    assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
 
 
 # --- Grouped call -----------------------------------------------------------
@@ -50,28 +56,46 @@ def test_returns_scope_key():
 
 
 def test_applies_several_options_at_once():
-    assert mpt.configure(out_order="line", out_format="latex", precision=4) == _HERE
+    assert mpt.configure(
+        out_order="line",
+        out_format="latex",
+        precision=4,
+        multiple_assignment_reduce=True,
+    ) == _HERE
     assert mathprint_main.Printer.line_on(_HERE)
     assert mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) == 4
+    assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
 
 
 def test_no_arguments_changes_nothing():
-    mpt.configure(out_order="line", out_format="latex", precision=4)
+    mpt.configure(
+        out_order="line",
+        out_format="latex",
+        precision=4,
+        multiple_assignment_reduce=True,
+    )
     assert mpt.configure() == _HERE
     assert mathprint_main.Printer.line_on(_HERE)
     assert mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) == 4
+    assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
 
 
 # --- Omitted options stay unchanged ----------------------------------------
 
 def test_omitted_option_stays_unchanged():
-    mpt.configure(out_order="line", out_format="latex", precision=4)
+    mpt.configure(
+        out_order="line",
+        out_format="latex",
+        precision=4,
+        multiple_assignment_reduce=True,
+    )
     mpt.configure(precision=2)
     assert mathprint_main.Printer.line_on(_HERE)
     assert mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) == 2
+    assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
 
 
 def test_each_option_can_be_set_alone():
@@ -79,26 +103,46 @@ def test_each_option_can_be_set_alone():
     assert mathprint_main.Printer.line_on(_HERE)
     assert not mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) is None
+    assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
 
     mpt.configure(out_format="latex")
     assert mathprint_main.Printer.line_on(_HERE)
     assert mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) is None
+    assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
 
     mpt.configure(precision=4)
     assert mathprint_main.Printer.line_on(_HERE)
     assert mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) == 4
+    assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
+
+    mpt.configure(multiple_assignment_reduce=True)
+    assert mathprint_main.Printer.line_on(_HERE)
+    assert mathprint_main.Printer.latex_on(_HERE)
+    assert mathprint_main.Printer.precision_of(_HERE) == 4
+    assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
 
 
 # --- Turning options back off ----------------------------------------------
 
 def test_values_can_be_restored():
-    mpt.configure(out_order="line", out_format="latex", precision=4)
-    mpt.configure(out_order="column", out_format="text", precision=None)
+    mpt.configure(
+        out_order="line",
+        out_format="latex",
+        precision=4,
+        multiple_assignment_reduce=True,
+    )
+    mpt.configure(
+        out_order="column",
+        out_format="text",
+        precision=None,
+        multiple_assignment_reduce=False,
+    )
     assert not mathprint_main.Printer.line_on(_HERE)
     assert not mathprint_main.Printer.latex_on(_HERE)
     assert mathprint_main.Printer.precision_of(_HERE) is None
+    assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
 
 
 # --- Validation -------------------------------------------------------------
@@ -119,6 +163,12 @@ def test_rejects_non_positive_precision():
     with pytest.raises(ValueError):
         mpt.configure(precision=0)
     assert mathprint_main.Printer.precision_of(_HERE) is None
+
+
+def test_rejects_non_bool_multiple_assignment_reduce():
+    with pytest.raises(ValueError, match="multiple_assignment_reduce"):
+        mpt.configure(multiple_assignment_reduce="yes")  # pyright: ignore[reportArgumentType]
+    assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
 
 
 def test_rejects_positional_arguments():

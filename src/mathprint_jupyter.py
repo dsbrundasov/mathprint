@@ -27,6 +27,9 @@ numbers with ``n`` significant digits::
 
     mpt.configure(out_order="line", precision=4)
 
+``multiple_assignment_reduce=True`` collapses a nested assignment chain such as
+``ro1 := (ro := (c := 2230))`` to ``ro1 := 2230`` in the substitution phase.
+
 Unload with::
 
     %unload_ext mathprint_jupyter

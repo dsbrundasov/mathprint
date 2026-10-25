@@ -30,6 +30,7 @@ printed value and the macro's return value come from that single evaluation.
 - [Layout: one line or a column](#layout-one-line-or-a-column)
 - [LaTeX output](#latex-output)
 - [Display precision](#display-precision)
+- [Nested assignments](#nested-assignments)
 - [Disabling mathprint (no-op stub)](#disabling-mathprint-no-op-stub)
 - [How it works (three phases)](#how-it-works-three-phases)
 - [Order guarantee](#order-guarantee)
@@ -98,6 +99,10 @@ mpt[y > (a + z) * 2]
 - Optional **display precision**: `mpt.configure(precision=n)` shows numbers with
   `n` significant digits, per file, without affecting the computed value. See
   [Display precision](#display-precision).
+- Optional **nested-assignment collapsing**:
+  `mpt.configure(multiple_assignment_reduce=True)` shows a chain such as
+  `ro1 := (ro := (ro_БФСС := 2230))` as `ro1 := 2230` in the substitution phase.
+  See [Nested assignments](#nested-assignments).
 
 ---
 
@@ -326,6 +331,7 @@ mpt.configure(out_order="line", out_format="latex", precision=4)
 | `out_order` | `"column"` \| `"line"` | `"column"` | three lines, or all three phases on one line |
 | `out_format` | `"text"` \| `"latex"` | `"text"` | plain text, or LaTeX (Jupyter) |
 | `precision` | `int` \| `None` | `None` (full) | significant digits shown; `None` resets |
+| `multiple_assignment_reduce` | `bool` | `False` | collapse a nested assignment chain in phase 2 |
 
 Every argument is optional, and **an omitted argument is left unchanged** — so
 `mpt.configure(precision=2)` only touches the precision:
@@ -334,6 +340,7 @@ Every argument is optional, and **an omitted argument is left unchanged** — so
 mpt.configure(out_order="line")      # one-line layout; format and precision as they were
 mpt.configure(out_format="latex")    # LaTeX; layout and precision as they were
 mpt.configure(precision=None)        # full precision again
+mpt.configure(multiple_assignment_reduce=True)  # collapse nested assignments
 ```
 
 Invalid values raise `ValueError`. The settings are per file (or per notebook in
@@ -461,6 +468,44 @@ as `23`, not `23.00`).
 
 The setting is scoped to the file (or notebook) where `mpt.configure(precision=n)`
 is called. `mpt.configure(precision=None)` restores the default.
+
+---
+
+## Nested assignments
+
+A chain of assignments in one call, `ro1 := (ro := (ro_БФСС := 2230))`, evaluates
+to the innermost value, so by default phase 2 simply repeats the whole chain —
+the same text as phase 1 (only loaded names would differ). To collapse it to the
+single value instead, enable `multiple_assignment_reduce`:
+
+```python
+from mathprint import mpt
+mpt.configure(multiple_assignment_reduce=True)
+
+mpt[ro1 := (ro := (ro_БФСС := 2230))]
+# ro1 := (ro := (ro_БФСС := 2230))   <- phase 1: exactly as written
+# ro1 := 2230                        <- phase 2: collapsed
+# ro1 := 2230                        <- phase 3: the value
+```
+
+With `out_order="line"` this is the difference between
+`ro1 = (ro := (ro_БФСС := 2230)) = (ro := (ro_БФСС := 2230)) = 2230` (default)
+and `ro1 = (ro := (ro_БФСС := 2230)) = 2230 = 2230` (enabled).
+
+Names inside the innermost value are still substituted, in place:
+
+```python
+x = 5
+mpt[a := (b := x + 1)]
+# a := (b := x + 1)
+# a := 5 + 1
+# a := 6
+```
+
+Only a **direct chain** is collapsed — each assignment's right-hand side is
+itself an assignment. A single assignment, or an assignment used inside a larger
+expression (`mpt[(b := 3) + 1]`), keeps its ordinary phase 2. The default is
+unchanged. `mpt.configure(multiple_assignment_reduce=False)` switches back.
 
 ---
 

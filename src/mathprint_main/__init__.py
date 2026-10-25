@@ -95,8 +95,11 @@ shown via ``IPython.display``, the ``display(Latex(py2tex(...)))`` recipe;
 nothing here imports ``pytexit`` unless LaTeX mode is actually used.
 ``precision=n`` rounds the numbers *shown* by phases 2 and 3 to ``n`` significant
 digits (``3.123123412`` prints as ``3.123`` for ``n=4``) without affecting the
-value; ``precision=None`` restores the default. ``mpt.configure(...)`` returns
-the scope key it changed.
+value; ``precision=None`` restores the default.
+``multiple_assignment_reduce=True`` collapses a chain of assignments (e.g.
+``ro1 := (ro := (ro_БФСС := 2230))``) to the value of the innermost assignment in
+phase 2 (``ro1 := 2230``); phase 1 still shows the chain as written.
+``mpt.configure(...)`` returns the scope key it changed.
 
 **How the code is laid out.** The work is a short pipeline of single-purpose
 classes, in reading order:
@@ -311,10 +314,13 @@ class Printer:
     * the format -- plain text (default) or LaTeX
       (``mpt.configure(out_format="latex")``), and
     * the display precision -- full, or ``n`` significant digits
-      (``mpt.configure(precision=n)``).
+      (``mpt.configure(precision=n)``), and
+    * whether phase 2 collapses a nested assignment chain
+      (``mpt.configure(multiple_assignment_reduce=True)``).
 
     So the settings never leak between files. They live in :attr:`line_scopes`,
-    :attr:`latex_scopes` and :attr:`precision_scopes`; the ``key_of*`` methods
+    :attr:`latex_scopes`, :attr:`precision_scopes` and
+    :attr:`multiple_assignment_reduce_scopes`; the ``key_of*`` methods
     map a file or a live module to a scope key; and :meth:`render`, :meth:`text`,
     :meth:`emit` and :meth:`show` are the runtime hooks the expanded code calls
     (see :class:`Expander`).
@@ -331,6 +337,10 @@ class Printer:
 
     #: Scope keys that set a display precision, mapped to significant digits.
     precision_scopes = {}
+
+    #: Scope keys whose phase 2 collapses a nested assignment chain to the value
+    #: of the innermost assignment (see ``multiple_assignment_reduce=True``).
+    multiple_assignment_reduce_scopes = set()
 
     #: Values whose ``str`` repr is noise (``<function f at 0x…>``,
     #: ``<class 'int'>``, ``<module 'math' …>``). For these, phase 2 keeps the
@@ -401,6 +411,15 @@ class Printer:
         return key
 
     @classmethod
+    def set_multiple_assignment_reduce(cls, key, on=True):
+        """Enable (or disable) nested-assignment collapsing for `key`; return `key`."""
+        if on:
+            cls.multiple_assignment_reduce_scopes.add(key)
+        else:
+            cls.multiple_assignment_reduce_scopes.discard(key)
+        return key
+
+    @classmethod
     def line_on(cls, key):
         """Whether `key` (or every file, via ``ANY_FILE``) uses one-line layout."""
         return cls.ANY_FILE in cls.line_scopes or key in cls.line_scopes
@@ -414,6 +433,14 @@ class Printer:
     def precision_of(cls, key):
         """Significant digits to show for `key`, or ``None`` for the default."""
         return cls.precision_scopes.get(key)
+
+    @classmethod
+    def multiple_assignment_reduce_on(cls, key):
+        """Whether `key` collapses a nested assignment chain in phase 2."""
+        return (
+            cls.ANY_FILE in cls.multiple_assignment_reduce_scopes
+            or key in cls.multiple_assignment_reduce_scopes
+        )
 
     # --- the runtime hooks (called by the expanded code) --------------------
 
@@ -442,6 +469,18 @@ class Printer:
             if shown is not None:
                 return shown
         return str(value)
+
+    @classmethod
+    def substituted(cls, key, normal, reduced, *values):
+        """Phase 2 for a nested assignment chain: fill one of two templates.
+
+        `normal` is the full substitution (the whole chain), `reduced` is the
+        chain collapsed to the innermost value (``ro1 := 2230``). Which one is
+        used is a runtime setting, so the macro passes both; `values` are the
+        rendered occurrences, evaluated once and shared by both templates.
+        """
+        template = reduced if cls.multiple_assignment_reduce_on(key) else normal
+        return template.format(*values)
 
     @classmethod
     def emit(cls, key, text):
@@ -637,19 +676,59 @@ class Expander:
         # name's value (a `str.format` template plus one argument per name).
         source = self.source.segment(expr)
         template, names = self.source.template(source, expr)
-        substituted = ast.Call(func=ast.Attribute(
-                value=ast.Constant(template),
-                attr="format",
-                ctx=ast.Load()
-            ),
-            args=[self._rendered_arg(key, node) for node in names],
-            keywords=[]
-        )
+        rendered = [self._rendered_arg(key, node) for node in names]
+
+        inner = self._innermost_assignment_value(expr) if name else None
+        if inner is None:
+            substituted = ast.Call(func=ast.Attribute(
+                    value=ast.Constant(template),
+                    attr="format",
+                    ctx=ast.Load()
+                ),
+                args=rendered,
+                keywords=[]
+            )
+        else:
+            # A chain such as `ro1 := (ro := (ro_БФСС := 2230))`. Phase 1 keeps
+            # the full chain; phase 2 can collapse it to `ro1 := 2230`. Which
+            # one is shown is a runtime setting, so both templates are built
+            # here and `Printer.substituted` picks one; the occurrences (which
+            # are all inside the innermost value either way) are rendered once.
+            inner_source = self.source.segment(inner)
+            inner_template = self.source.template(inner_source, inner)[0]
+            call_args: list[ast.expr] = [
+                ast.Constant(key),
+                ast.Constant(template),
+                ast.Constant(f"{name} := {inner_template}"),
+            ]
+            call_args += rendered
+            substituted = ast.Call(
+                func=q[h[Printer].substituted], args=call_args, keywords=[]
+            )
 
         # `show` prints the source, the substitution and (phase 3) the value, and
         # returns the value. The arguments are evaluated left to right, so the
         # substitution is built from the *old* values before `expr` runs.
         return q[h[Printer].show(u[key], u[name], u[source], a[substituted], a[expr])]
+
+    @staticmethod
+    def _innermost_assignment_value(expr):
+        """`expr` with its nested assignment wrappers removed, or ``None``.
+
+        Only a *direct* chain is handled -- an assignment whose right-hand side
+        is itself an assignment, recursively, as in
+        ``ro1 := (ro := (ro_БФСС := 2230))``. The innermost value is what the
+        whole chain evaluates to, and it is also where all loaded names live,
+        so the same rendered values fill either phase-2 template. Anything else
+        (``mpt[(a := 3) + 1]``, or a single assignment) returns ``None`` and
+        keeps the ordinary phase 2.
+        """
+        if type(expr) is not ast.NamedExpr or type(expr.value) is not ast.NamedExpr:
+            return None
+        node = expr.value
+        while type(node) is ast.NamedExpr:
+            node = node.value
+        return node
 
     @staticmethod
     def _rendered_arg(key, name_node):
@@ -693,14 +772,17 @@ def mpt(expr, **kw):
 _UNSET = object()
 
 
-def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET):
+def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET,
+               multiple_assignment_reduce=_UNSET):
     """Back ``mpt.configure(...)``: set display options for the calling file.
 
     Every argument is optional; an argument that is omitted is left unchanged.
     ``out_order`` is ``"column"`` (default) or ``"line"``; ``out_format`` is
     ``"text"`` (default) or ``"latex"``; ``precision`` is a number of displayed
-    significant digits, or ``None`` to restore the default. Returns the scope key
-    that was affected.
+    significant digits, or ``None`` to restore the default;
+    ``multiple_assignment_reduce=True`` collapses a chain such as
+    ``ro1 := (ro := (c := 2230))`` to ``ro1 := 2230`` in phase 2 (phase 1 keeps
+    the chain). Returns the scope key that was affected.
     """
     key = Printer.key_of_globals(sys._getframe(1).f_globals)
     if out_order is not _UNSET:
@@ -717,6 +799,12 @@ def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET):
         Printer.set_latex(key, out_format == "latex")
     if precision is not _UNSET:
         Printer.set_precision(key, precision)
+    if multiple_assignment_reduce is not _UNSET:
+        if not isinstance(multiple_assignment_reduce, bool):
+            raise ValueError(
+                "mpt.configure(multiple_assignment_reduce=...) expects True or False"
+            )
+        Printer.set_multiple_assignment_reduce(key, multiple_assignment_reduce)
     return key
 
 
