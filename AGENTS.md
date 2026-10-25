@@ -3,15 +3,17 @@
 ## Environment: use ONLY the `work` environment
 
 All checks — tests, type checking, running examples, notebooks — **must** run in
-the conda environment `work`. Do not use any other interpreter (not the system
-Python, not `C:\Python314`, not the `Roaming\Python` site-packages).
+the conda environment `work`. Do not use the system Python or `work_3_14_6`, even
+though a few packages may also be importable from the user-site
+(`C:\Users\dsbru\AppData\Roaming\Python\Python314`).
 
-    interpreter:  C:\ProgramData\miniforge3\envs\work\python.exe
+    interpreter:  C:\Users\dsbru\.conda\envs\work\python.exe
 
 That environment has everything the project needs (`mcpyrate`, `pytexit`,
-`IPython`, `nbclient`/`nbformat`/`nbconvert`) plus a single-file checkout
-installed with `pip install -e .`. There is no `pytest` in any other interpreter
-you should touch.
+`IPython`, `nbclient`/`nbformat`/`nbconvert`, `pytest`, `pyright`) plus the
+project installed in editable mode with `pip install -e .`. Use only that
+interpreter — other ones (the system Python, `work_3_14_6`) may lack `pytexit`
+or the editable install.
 
 ## Running the checks (from the project root)
 
@@ -19,14 +21,17 @@ you should touch.
 # clear mcpyrate's cached macro expansions, then run the tests
 Get-ChildItem -Path src,tests,examples -Recurse -Directory -Filter __pycache__ |
     Remove-Item -Recurse -Force
-& "C:\ProgramData\miniforge3\envs\work\python.exe" -m pytest -q
+& "C:\Users\dsbru\.conda\envs\work\python.exe" -m pytest -q
 
 # static types
-& "C:\ProgramData\miniforge3\envs\work\python.exe" -m pyright
+& "C:\Users\dsbru\.conda\envs\work\python.exe" -m pyright
 
 # runnable example (needs the source tree on PYTHONPATH)
 $env:PYTHONPATH = "$PWD\src"
-& "C:\ProgramData\miniforge3\envs\work\python.exe" examples\demo.py
+& "C:\Users\dsbru\.conda\envs\work\python.exe" examples\demo.py
+
+# execute the LaTeX example notebook (needs pytexit)
+& "C:\Users\dsbru\.conda\envs\work\python.exe" -c "import nbformat; from nbclient import NotebookClient; NotebookClient(nbformat.read('examples/demo_latex.ipynb', as_version=4), timeout=120).execute(); print('notebook ok')"
 ```
 
 `mcpyrate` caches macro expansions in `__pycache__`. **After changing the macro
@@ -37,8 +42,9 @@ in a fresh process**, or you may test stale expansions.
 
 `mathprint` is a **vibecode** project: a `mcpyrate` macro `mpt` that prints an
 expression in three phases — the exact source, the source with each variable
-replaced by its current value (in place, order preserved), and the value. It is
-opt-in LaTeX and opt-in display precision, all settings per file. See `README.md`
+replaced by its current value (in place, order preserved), and the value.
+Display settings (layout, plain text vs LaTeX, display precision) are opt-in,
+grouped in `mpt.configure(...)`, and scoped per file. See `README.md`
 for the user-facing description and `src/mathprint_main/__init__.py` for the
 implementation, which is a short pipeline of single-purpose classes (`Numbers`,
 `Latex`, `Printer`, `Source`, `Expander`).
@@ -47,8 +53,8 @@ implementation, which is a short pipeline of single-purpose classes (`Numbers`,
 
 - Keep the import exactly `from mathprint import mpt` (a no-op stub lives in
   `src/mathprint/stub.py`).
-- User-facing switches are `mpt.to_line()` / `mpt.to_column()`, `mpt.latex()`
-  and `mpt.precision(n)` — each affects the file (or notebook) it is called in.
+- User-facing settings are grouped in `mpt.configure(out_order=..., out_format=...,
+  precision=...)` — each affects the file (or notebook) it is called in.
 - The expression must be evaluated **exactly once**. The source is required:
   there is no fallback (a clear `MacroExpansionError` is raised when it is
   missing).

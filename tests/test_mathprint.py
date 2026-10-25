@@ -415,4 +415,4 @@ def test_missing_source_raises_clear_error(monkeypatch):
     node = ast.parse("y + 0", mode="eval").body
     monkeypatch.setattr(mathprint_main.Source, "override", None)
     with pytest.raises(MacroExpansionError):
-        mathprint_main.mpt(node, expander=_Expander())
+        mathprint_main.mpt(node, expander=_Expander())  # pyright: ignore[reportCallIssue]

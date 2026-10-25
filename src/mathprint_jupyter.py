@@ -17,15 +17,15 @@ Then, in any cell::
     z = 10
     mpt[x := y * 7 + z]
 
-To render the output as LaTeX instead of plain text, call ``mpt.latex()`` in any
-cell (it applies to the rest of the notebook)::
+Display options are grouped in ``mpt.configure(...)``; call it in any cell (it
+applies to the rest of the notebook)::
 
-    mpt.latex()
+    mpt.configure(out_format="latex")
 
-To show numbers with a fixed number of significant digits, call
-``mpt.precision(n)``::
+Use ``out_order="line"`` for the one-line layout, and ``precision=n`` to show
+numbers with ``n`` significant digits::
 
-    mpt.precision(4)
+    mpt.configure(out_order="line", precision=4)
 
 Unload with::
 
@@ -82,7 +82,7 @@ def load_ipython_extension(ipython):
 
     # Make `mpt` available as a macro everywhere in the kernel, so that the
     # one-liner `from mathprint import mpt` also works in cells.
-    global_bindings["mpt"] = mathprint_main.mpt
+    global_bindings["mpt"] = mathprint_main.mpt  # pyright: ignore[reportArgumentType]
 
     transformer = _MathprintASTTransformer()
     if transformer not in ipython.ast_transformers:

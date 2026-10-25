@@ -46,11 +46,18 @@ class _Stub:
     ``__getitem__``; the stub discards it and returns ``None``. The expression is
     still evaluated exactly once, matching the single evaluation of the real
     macro's phase 3.
+
+    ``mpt.configure(...)`` is accepted as a no-op, so a module can be disabled
+    without also removing its display configuration.
     """
 
     __slots__ = ()
 
     def __getitem__(self, item: Any) -> None:
+        pass
+
+    def configure(self, **options: Any) -> None:
+        """No-op: display options have no effect when mathprint is disabled."""
         pass
 
 

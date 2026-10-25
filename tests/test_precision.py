@@ -1,4 +1,4 @@
-"""Tests for the display precision setting (``mpt.precision``).
+"""Tests for the display precision setting (``mpt.configure(precision=...)``).
 
 Precision must affect only the *displayed* numbers: the expression is still
 evaluated with full precision and the macro's return value stays unrounded.
@@ -59,24 +59,24 @@ def test_format_number_handles_complex():
     assert mathprint_main.Numbers.format(1.234567 - 2.345678j, 4) == "1.235-2.346j"
 
 
-# --- The `mpt.precision()` switch ------------------------------------------
+# --- The `precision` option ------------------------------------------------
 
-def test_precision_switch_enable_reset():
-    assert mpt.precision(4) == _HERE
+def test_precision_option_enable_reset():
+    assert mpt.configure(precision=4) == _HERE
     assert mathprint_main.Printer.precision_of(_HERE) == 4
-    assert mpt.precision(None) == _HERE
+    assert mpt.configure(precision=None) == _HERE
     assert mathprint_main.Printer.precision_of(_HERE) is None
 
 
 def test_precision_scoped_to_calling_file():
-    mpt.precision(4)
+    mpt.configure(precision=4)
     assert mathprint_main.Printer.precision_of(_HERE) == 4
     assert mathprint_main.Printer.precision_of(os.path.abspath("other.py")) is None
 
 
 def test_precision_rejects_non_positive():
     with pytest.raises(ValueError):
-        mpt.precision(0)
+        mpt.configure(precision=0)
 
 
 # --- Effect on output ------------------------------------------------------
@@ -89,7 +89,7 @@ def test_default_is_full_precision(capsys):
 
 
 def test_precision_rounds_display_but_not_the_value(capsys):
-    mpt.precision(4)
+    mpt.configure(precision=4)
     v = 3.123123412
     result = mpt[v + 0]
     assert capsys.readouterr().out.splitlines() == ["v + 0", "3.123 + 0", "3.123"]
@@ -98,7 +98,7 @@ def test_precision_rounds_display_but_not_the_value(capsys):
 
 
 def test_precision_in_assignment_value_line(capsys):
-    mpt.precision(4)
+    mpt.configure(precision=4)
     v = 23.00134
     mpt[r := v * 1]
     out = capsys.readouterr().out.splitlines()
@@ -107,8 +107,8 @@ def test_precision_in_assignment_value_line(capsys):
 
 
 def test_precision_reset_restores_full_precision(capsys):
-    mpt.precision(4)
-    mpt.precision(None)
+    mpt.configure(precision=4)
+    mpt.configure(precision=None)
     v = 3.123123412
     mpt[v + 0]
     assert capsys.readouterr().out.splitlines() == ["v + 0", "3.123123412 + 0", "3.123123412"]
@@ -116,7 +116,7 @@ def test_precision_reset_restores_full_precision(capsys):
 
 def test_precision_leaves_non_numbers_alone(capsys):
     sp = pytest.importorskip("sympy")
-    mpt.precision(4)
+    mpt.configure(precision=4)
 
     a = sp.symbols("a")
     mpt[a + 0]

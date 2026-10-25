@@ -14,4 +14,4 @@ from mcpyrate.core import global_bindings
 
 import mathprint_main
 
-global_bindings["mpt"] = mathprint_main.mpt
+global_bindings["mpt"] = mathprint_main.mpt  # pyright: ignore[reportArgumentType]

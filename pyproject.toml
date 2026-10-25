@@ -23,8 +23,8 @@ dev = [
     "sympy",
     "pytest",
 ]
-# LaTeX output mode (`mpt.latex()`): convert lines with pytexit and display
-# them with IPython.
+# LaTeX output mode (`mpt.configure(out_format="latex")`): convert lines with
+# pytexit and display them with IPython.
 latex = [
     "pytexit",
     "ipython",

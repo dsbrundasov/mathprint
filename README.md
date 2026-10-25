@@ -26,6 +26,7 @@ printed value and the macro's return value come from that single evaluation.
 - [Usage](#usage)
 - [Several expressions in one call](#several-expressions-in-one-call)
 - [Jupyter / IPython](#jupyter--ipython)
+- [Configuration](#configuration)
 - [Layout: one line or a column](#layout-one-line-or-a-column)
 - [LaTeX output](#latex-output)
 - [Display precision](#display-precision)
@@ -87,15 +88,15 @@ mpt[y > (a + z) * 2]
   a module/function/class/callable — but a chain that resolves to a plain value
   is substituted: `me.H.atomic_number` prints as `1`.
 - Works under both `python` and `macropython`.
-- Optional **one-line layout**: `mpt.to_line()` joins the three phases into a
-  single line — `x = 3 + y = 3 + 5 = 8` — per file. A column of lines is the
-  default; `mpt.to_column()` switches back. See
+- Optional **one-line layout**: `mpt.configure(out_order="line")` joins the three
+  phases into a single line — `x = 3 + y = 3 + 5 = 8` — per file. A column of
+  lines is the default; `out_order="column"` switches back. See
   [Layout: one line or a column](#layout-one-line-or-a-column).
-- Optional **LaTeX output** (Jupyter): call `mpt.latex()` to render the three
-  lines as LaTeX via `pytexit` + `IPython.display`, per file. Plain text stays
-  the default. See [LaTeX output](#latex-output).
-- Optional **display precision**: `mpt.precision(n)` shows numbers with `n`
-  significant digits, per file, without affecting the computed value. See
+- Optional **LaTeX output** (Jupyter): `mpt.configure(out_format="latex")`
+  renders the three lines as LaTeX via `pytexit` + `IPython.display`, per file.
+  Plain text stays the default. See [LaTeX output](#latex-output).
+- Optional **display precision**: `mpt.configure(precision=n)` shows numbers with
+  `n` significant digits, per file, without affecting the computed value. See
   [Display precision](#display-precision).
 
 ---
@@ -308,15 +309,48 @@ A complete example notebook is in [examples/demo.ipynb](examples/demo.ipynb).
 
 ---
 
-## Layout: one line or a column
+## Configuration
 
-By default the three phases are a **column** — one line each. To join them into a
-single line — the name appearing once — call `mpt.to_line()`:
+All display settings are grouped in a single call, `mpt.configure(...)`. It
+affects the file (or notebook) it is called in and returns the scope key that
+changed (the file path, or `<ipython>` in a notebook):
 
 ```python
 from mathprint import mpt
 
-mpt.to_line()
+mpt.configure(out_order="line", out_format="latex", precision=4)
+```
+
+| Option | Values | Default | Meaning |
+|---|---|---|---|
+| `out_order` | `"column"` \| `"line"` | `"column"` | three lines, or all three phases on one line |
+| `out_format` | `"text"` \| `"latex"` | `"text"` | plain text, or LaTeX (Jupyter) |
+| `precision` | `int` \| `None` | `None` (full) | significant digits shown; `None` resets |
+
+Every argument is optional, and **an omitted argument is left unchanged** — so
+`mpt.configure(precision=2)` only touches the precision:
+
+```python
+mpt.configure(out_order="line")      # one-line layout; format and precision as they were
+mpt.configure(out_format="latex")    # LaTeX; layout and precision as they were
+mpt.configure(precision=None)        # full precision again
+```
+
+Invalid values raise `ValueError`. The settings are per file (or per notebook in
+Jupyter), so they never leak between modules. The three sections below cover each
+option in detail.
+
+---
+
+## Layout: one line or a column
+
+By default the three phases are a **column** — one line each. To join them into a
+single line — the name appearing once — set `out_order="line"`:
+
+```python
+from mathprint import mpt
+
+mpt.configure(out_order="line")
 y = 5
 mpt[x := 3 + y]
 # x = 3 + y = 3 + 5 = 8
@@ -326,45 +360,43 @@ mpt[3 + y]
 ```
 
 The phases are joined with ` = `; the source and the substitution keep their
-exact spelling (parentheses included). `mpt.to_column()` restores the default
-column. Both switches affect the file (or notebook) they are called in and return
-the scope key that changed.
+exact spelling (parentheses included). `mpt.configure(out_order="column")`
+restores the default column. Both forms affect the file (or notebook) they are
+called in and return the scope key that changed.
 
-With `mpt.latex()` also active, a one-line result is joined with `==` so `pytexit`
-renders it as a chain of `=`:
+With `out_format="latex"` also active, a one-line result is joined with `==` so
+`pytexit` renders it as a chain of `=`:
 
 ```python
-mpt.to_line()
-mpt.latex()
+mpt.configure(out_order="line", out_format="latex")
 mpt[x := 3 + y]
 # LaTeX:  x = 3 + y = 3 + 5 = 8
 ```
 
-The layout combines with the other per-file settings (`mpt.latex()`,
-`mpt.precision(n)`).
+The layout combines with the other per-file settings (`out_format`, `precision`).
 
 ---
 
 ## LaTeX output
 
 Output is **plain text by default**. To render the three lines as LaTeX — like
-`display(Latex(py2tex(...)))` — call `mpt.latex()` once in the file:
+`display(Latex(py2tex(...)))` — set `out_format="latex"` once in the file:
 
 ```python
 %load_ext mathprint_jupyter        # Jupyter / IPython only
 
 from mathprint import mpt
-mpt.latex()                        # <- this file now renders LaTeX
+mpt.configure(out_format="latex")  # <- this file now renders LaTeX
 
 y = 5
 z = 10
 mpt[x := y * 7 + z]
 ```
 
-`mpt.latex()` switches the file it appears in (in a notebook, the whole
-notebook); other modules are unaffected. `mpt.latex(False)` moves that file back
-to plain text. Both forms return the scope key that changed (the file path, or
-`<ipython>` in a notebook).
+The setting applies to the file it appears in (in a notebook, the whole
+notebook); other modules are unaffected. `mpt.configure(out_format="text")`
+moves that file back to plain text. Both forms return the scope key that changed
+(the file path, or `<ipython>` in a notebook).
 
 Requires `pytexit` and `IPython`:
 
@@ -398,12 +430,12 @@ A complete example notebook is in
 ## Display precision
 
 By default each number is printed with its full `str` value. To cap the
-**displayed** digits, call `mpt.precision(n)` — numbers are then shown rounded to
+**displayed** digits, set `precision=n` — numbers are then shown rounded to
 `n` significant digits:
 
 ```python
 from mathprint import mpt
-mpt.precision(4)
+mpt.configure(precision=4)
 
 v = 3.123123412
 mpt[v + 0]
@@ -427,8 +459,8 @@ and numpy scalars. Symbolic values (e.g. sympy expressions), modules, functions
 and classes are shown as usual. Trailing zeros are not padded (`23.00134` prints
 as `23`, not `23.00`).
 
-The setting is scoped to the file (or notebook) where `mpt.precision(n)` is
-called. `mpt.precision()` (or `mpt.precision(None)`) restores the default.
+The setting is scoped to the file (or notebook) where `mpt.configure(precision=n)`
+is called. `mpt.configure(precision=None)` restores the default.
 
 ---
 

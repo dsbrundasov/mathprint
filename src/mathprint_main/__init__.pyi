@@ -8,16 +8,9 @@ from typing import Any
 
 class _Macro:
     def __getitem__(self, item: Any) -> Any: ...
-    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
-    # `mpt.to_line()` / `mpt.to_column()` choose the calling file's layout.
-    to_line: Any
-    to_column: Any
-    # `mpt.latex()` enables LaTeX output for the calling file; `mpt.latex(False)`
-    # disables it.
-    latex: Any
-    # `mpt.precision(n)` shows numbers in the calling file with `n` significant
-    # digits; `mpt.precision(None)` restores the default.
-    precision: Any
+    # `mpt.configure(...)` groups the per-file display settings:
+    # `out_order="column" | "line"`, `out_format="text" | "latex"`, `precision=n`.
+    configure: Any
 
 mpt: _Macro
 
@@ -84,8 +77,10 @@ class Expander:
     @staticmethod
     def collect(*values: Any) -> tuple[Any, ...]: ...
 
-# --- The macro and its switches -------------------------------------------
-def _to_line() -> str: ...
-def _to_column() -> str: ...
-def _set_latex(enabled: bool = ...) -> str: ...
-def _set_precision(digits: int | None = ...) -> str: ...
+# --- The macro ------------------------------------------------------------
+def _configure(
+    *,
+    out_order: str = ...,
+    out_format: str = ...,
+    precision: int | None = ...,
+) -> str: ...

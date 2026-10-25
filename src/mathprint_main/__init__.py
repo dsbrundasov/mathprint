@@ -79,27 +79,24 @@ written: ``mpt[math.floor(y)]`` prints ``math.floor(5)`` (not
 is substituted as a unit: ``mpt[me.H.atomic_number]`` prints
 ``me.H.atomic_number`` then ``1``, since the chain's value is a plain number.
 
-**LaTeX output (opt-in, per file).** Output is plain text by default. Calling
-``mpt.latex()`` switches *the file where the call appears* to LaTeX: each line is
-converted with ``pytexit.py2tex`` and shown via ``IPython.display``, the
-``display(Latex(py2tex(...)))`` recipe. ``mpt.latex(False)`` switches back. The
-switch is per file (or per notebook in Jupyter), and nothing here imports
-``pytexit`` unless LaTeX mode is actually used.
+**Configuration (opt-in, per file).** Output is plain text, in a column, at full
+precision by default. ``mpt.configure(...)`` changes these for *the file where the
+call appears* (or the whole notebook in Jupyter), for every ``mpt[...]`` in that
+scope::
 
-**Display precision (opt-in, per file).** Calling ``mpt.precision(n)`` rounds the
-numbers *shown* by phases 2 and 3 to ``n`` significant digits (``3.123123412``
-prints as ``3.123`` for ``n=4``). This affects only the display: the expression
-is still evaluated, and the macro's return value is unrounded. ``mpt.precision()``
-(or ``mpt.precision(None)``) restores the default.
+    mpt.configure(out_order="line", out_format="latex", precision=4)
 
-**Layout (opt-in, per file).** Output is a *column* by default: the source, the
-substitution and the value, each on its own line. ``mpt.to_line()`` switches the
-calling file to a single *line* instead, the name appearing once::
-
-    mpt.to_line()
-    mpt[x := 3 + y]     # prints:  x = 3 + y = 3 + 5 = 8
-
-``mpt.to_column()`` switches back.
+Every argument is optional; an omitted argument is left unchanged.
+``out_order`` is ``"column"`` (the default: source, substitution and value on
+separate lines) or ``"line"`` (one line, the name appearing once:
+``x = 3 + y = 3 + 5 = 8``). ``out_format`` is ``"text"`` (the default) or
+``"latex"``, in which case each line is converted with ``pytexit.py2tex`` and
+shown via ``IPython.display``, the ``display(Latex(py2tex(...)))`` recipe;
+nothing here imports ``pytexit`` unless LaTeX mode is actually used.
+``precision=n`` rounds the numbers *shown* by phases 2 and 3 to ``n`` significant
+digits (``3.123123412`` prints as ``3.123`` for ``n=4``) without affecting the
+value; ``precision=None`` restores the default. ``mpt.configure(...)`` returns
+the scope key it changed.
 
 **How the code is laid out.** The work is a short pipeline of single-purpose
 classes, in reading order:
@@ -310,10 +307,11 @@ class Printer:
     or the "no file" case (:attr:`ANY_FILE`). Each scope independently picks:
 
     * the layout -- a column of lines (default), or one line
-      (``mpt.to_line()`` / ``mpt.to_column()``),
-    * the format -- plain text (default) or LaTeX (``mpt.latex()``), and
+      (``mpt.configure(out_order="line")``),
+    * the format -- plain text (default) or LaTeX
+      (``mpt.configure(out_format="latex")``), and
     * the display precision -- full, or ``n`` significant digits
-      (``mpt.precision(n)``).
+      (``mpt.configure(precision=n)``).
 
     So the settings never leak between files. They live in :attr:`line_scopes`,
     :attr:`latex_scopes` and :attr:`precision_scopes`; the ``key_of*`` methods
@@ -325,10 +323,10 @@ class Printer:
     #: Scope key meaning "every file" (used when no filename is known).
     ANY_FILE = "*"
 
-    #: Scope keys shown on a single line (see ``mpt.to_line()``); others columns.
+    #: Scope keys shown on a single line (see ``out_order="line"``); others columns.
     line_scopes = set()
 
-    #: Scope keys that opted into LaTeX output (see ``mpt.latex()``).
+    #: Scope keys that opted into LaTeX output (see ``out_format="latex"``).
     latex_scopes = set()
 
     #: Scope keys that set a display precision, mapped to significant digits.
@@ -368,7 +366,7 @@ class Printer:
             return "<ipython>"
         return cls.ANY_FILE
 
-    # --- the display switches (back `mpt.to_line` / `.latex` / `.precision`) -
+    # --- the display settings (back `mpt.configure`) ------------------------
 
     @classmethod
     def set_line(cls, key, on=True):
@@ -396,7 +394,9 @@ class Printer:
         else:
             digits = int(digits)
             if digits < 1:
-                raise ValueError("mpt.precision needs a positive number of significant digits")
+                raise ValueError(
+                    "mpt.configure(precision=...) needs a positive number of significant digits"
+                )
             cls.precision_scopes[key] = digits
         return key
 
@@ -690,47 +690,38 @@ def mpt(expr, **kw):
     return Expander(kw.get("expander")).expand(expr)
 
 
-def _to_line():
-    """Back ``mpt.to_line()``: show the calling file's output on one line."""
-    key = Printer.key_of_globals(sys._getframe(1).f_globals)
-    return Printer.set_line(key, True)
+_UNSET = object()
 
 
-def _to_column():
-    """Back ``mpt.to_column()``: show the calling file's output as a column (default)."""
-    key = Printer.key_of_globals(sys._getframe(1).f_globals)
-    return Printer.set_line(key, False)
+def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET):
+    """Back ``mpt.configure(...)``: set display options for the calling file.
 
-
-def _set_latex(enabled=True):
-    """Back the ``mpt.latex()`` switch: enable/disable LaTeX for the calling file.
-
-    ``mpt.latex()`` switches the file where the call appears (or the whole
-    notebook, in Jupyter) to LaTeX output; ``mpt.latex(False)`` switches it back
-    to plain text. Returns the scope key that was affected.
+    Every argument is optional; an argument that is omitted is left unchanged.
+    ``out_order`` is ``"column"`` (default) or ``"line"``; ``out_format`` is
+    ``"text"`` (default) or ``"latex"``; ``precision`` is a number of displayed
+    significant digits, or ``None`` to restore the default. Returns the scope key
+    that was affected.
     """
     key = Printer.key_of_globals(sys._getframe(1).f_globals)
-    return Printer.set_latex(key, enabled)
+    if out_order is not _UNSET:
+        if out_order not in ("column", "line"):
+            raise ValueError(
+                'mpt.configure(out_order=...) expects "column" or "line"'
+            )
+        Printer.set_line(key, out_order == "line")
+    if out_format is not _UNSET:
+        if out_format not in ("text", "latex"):
+            raise ValueError(
+                'mpt.configure(out_format=...) expects "text" or "latex"'
+            )
+        Printer.set_latex(key, out_format == "latex")
+    if precision is not _UNSET:
+        Printer.set_precision(key, precision)
+    return key
 
 
-def _set_precision(digits=None):
-    """Back the ``mpt.precision()`` switch: set displayed significant digits.
-
-    ``mpt.precision(n)`` shows numbers in the calling file (or notebook) rounded
-    to ``n`` significant digits; ``mpt.precision(None)`` restores the default
-    (full ``str`` of the value). Returns the scope key that was affected.
-    """
-    key = Printer.key_of_globals(sys._getframe(1).f_globals)
-    return Printer.set_precision(key, digits)
-
-
-# `mpt.to_line()` / `mpt.to_column()` choose the layout, `mpt.latex()` the format
-# (LaTeX) and `mpt.precision(n)` the displayed significant digits -- each for the
-# file (or notebook) it is called in. They are attached here as attributes of the
-# macro function so they are available wherever `mpt` itself is (e.g.
-# `from mathprint import mpt`). (`setattr`, so the type checker, which sees `mpt`
-# as a plain function, stays happy.)
-setattr(mpt, "to_line", _to_line)
-setattr(mpt, "to_column", _to_column)
-setattr(mpt, "latex", _set_latex)
-setattr(mpt, "precision", _set_precision)
+# `mpt.configure(...)` groups the per-file display settings. It is attached as an
+# attribute of the macro function, so it is available wherever `mpt` itself is
+# (e.g. `from mathprint import mpt`). (`setattr`, so the type checker, which sees
+# `mpt` as a plain function, stays happy.)
+setattr(mpt, "configure", _configure)

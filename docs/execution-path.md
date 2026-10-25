@@ -5,7 +5,7 @@
 ```python
 %load_ext mathprint_jupyter
 from mathprint import mpt
-mpt.latex()
+mpt.configure(out_format="latex")
 
 M_ДМФ, m_БФСС, M_P2O5 = 126.0, 0.0009458, 141.9
 mpt[m_ДМФ := M_ДМФ * 2 * (0.07 * m_БФСС) / M_P2O5]
@@ -35,9 +35,10 @@ mpt[m_ДМФ := M_ДМФ * 2 * (0.07 * m_БФСС) / M_P2O5]
 вызовы именно mcpyrate по записи в `global_bindings`. В Jupyter `_bootstrap` из
 `mathprint/__init__.py` сразу выходит, т.к. в globals есть `get_ipython`.
 
-А `mpt.latex()` — это уже обычный вызов во время выполнения (не макрос):
-`_set_latex()` → `Printer.key_of_globals(...)` возвращает `"<ipython>"` →
-`Printer.set_latex("<ipython>", True)` добавляет ключ в `Printer.latex_scopes`.
+А `mpt.configure(out_format="latex")` — это уже обычный вызов во время
+выполнения (не макрос): `_configure()` → `Printer.key_of_globals(...)` возвращает
+`"<ipython>"` → `Printer.set_latex("<ipython>", True)` добавляет ключ в
+`Printer.latex_scopes`.
 
 ---
 
@@ -184,8 +185,8 @@ Printer.show(
    - модули, функции, методы, классы и прочие вызываемые объекты оставляют своё
      имя;
 2. иначе `Printer.text(key, value)`:
-   - `digits = cls.precision_of(key)` — здесь `None` (`mpt.precision` не
-     вызывался);
+   - `digits = cls.precision_of(key)` — здесь `None` (`precision` не
+     задавался);
    - возвращает `str(value)`.
 
 Получаем:
@@ -219,7 +220,7 @@ Printer.render("<ipython>", "M_P2O5", 141.9)     -> "141.9"
 ### 2.5. `Printer.show(key, name, source, substituted, value)`
 
 - `shown = Printer.text(key, value)` → `"0.00011757513742071883"`;
-- `line_on(key)` → `False` (колонка по умолчанию, `mpt.to_line()` не вызывался);
+- `line_on(key)` → `False` (колонка по умолчанию, `out_order` не задавался);
 - три раза вызывает `Printer.emit(key, text)`:
   1. исходник;
   2. подстановка;
@@ -227,8 +228,8 @@ Printer.render("<ipython>", "M_P2O5", 141.9)     -> "141.9"
 
 ### 2.6. `Printer.emit`
 
-- `latex_on(key)` → `True`, т.к. ранее `mpt.latex()` добавил `"<ipython>"` в
-  `Printer.latex_scopes`;
+- `latex_on(key)` → `True`, т.к. ранее `mpt.configure(out_format="latex")`
+  добавил `"<ipython>"` в `Printer.latex_scopes`;
 - поэтому вместо `print(text)` вызывается `Latex.show(text)`.
 
 ---

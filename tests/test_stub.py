@@ -81,6 +81,17 @@ def test_any_subscript_is_accepted():
     ))
 
 
+def test_configure_is_a_silent_no_op():
+    _assert_ok(_run(
+        "from mathprint.stub import mpt\n"
+        "assert mpt.configure(out_order='line', out_format='latex', precision=4) is None\n"
+        "assert mpt.configure() is None\n"
+        "y = 5\n"
+        "assert mpt[y + 1] is None\n"
+        "print('ok')\n"
+    ))
+
+
 # --- Isolation: nothing from the project is loaded -------------------------
 
 def test_import_stub_is_self_contained():

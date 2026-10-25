@@ -39,21 +39,15 @@ sites, import the no-op stub instead -- change only this one line::
 See ``mathprint.stub`` for details. Importing that submodule must not activate
 the macro hook, which is why ``mpt`` below is provided lazily (PEP 562).
 
-To render the three lines as LaTeX (Jupyter) instead of plain text, call
-``mpt.latex()`` in the file that uses ``mpt``::
+Display options are grouped in ``mpt.configure(...)``, which applies to the file
+(or notebook) it is called in::
 
-    mpt.latex()
+    mpt.configure(out_order="line", out_format="latex", precision=4)
 
-``mpt.latex(False)`` switches back to plain text. The switch is scoped to that
-file (or notebook) and is off by default.
-
-To show numbers with a fixed number of significant digits, call
-``mpt.precision(n)`` in the same file::
-
-    mpt.precision(4)
-
-This affects only the display -- the value keeps full precision. Call
-``mpt.precision()`` to restore the default.
+``out_order`` is ``"column"`` (default) or ``"line"``; ``out_format`` is
+``"text"`` (default) or ``"latex"``; ``precision`` is a number of significant
+digits (or ``None`` to restore the default). Omitted arguments are left
+unchanged.
 """
 
 import os

@@ -1,4 +1,4 @@
-"""Tests for the optional LaTeX output mode (``mpt.latex()``).
+"""Tests for the optional LaTeX output mode (``mpt.configure(out_format="latex")``).
 
 The plain-text default must stay untouched, and LaTeX mode must route the three
 lines through ``mathprint_main.Latex.show`` instead of ``print``. The actual
@@ -49,33 +49,33 @@ def test_other_file_is_unaffected(capsys):
     assert result == 5
 
 
-# --- The `mpt.latex()` switch ----------------------------------------------
+# --- The `out_format` option -----------------------------------------------
 
-def test_latex_switch_enable_disable():
-    assert mpt.latex() == _HERE
+def test_latex_option_enable_disable():
+    assert mpt.configure(out_format="latex") == _HERE
     assert mathprint_main.Printer.latex_on(_HERE)
-    assert mpt.latex(False) == _HERE
+    assert mpt.configure(out_format="text") == _HERE
     assert not mathprint_main.Printer.latex_on(_HERE)
 
 
 # --- Enabled: routes to LaTeX ----------------------------------------------
 
 def test_enabled_routes_all_three_lines(shown):
-    mpt.latex()
+    mpt.configure(out_format="latex")
     result = mpt[2 + 3]
     assert shown == ["2 + 3", "2 + 3", "5"]
     assert result == 5
 
 
 def test_enabled_assignment_carries_name(shown):
-    mpt.latex()
+    mpt.configure(out_format="latex")
     mpt[g_latex := 2 * 3]
     assert shown == ["g_latex := 2 * 3", "g_latex := 2 * 3", "g_latex := 6"]
     assert g_latex == 6
 
 
 def test_enabled_prints_nothing_to_stdout(capsys, shown):
-    mpt.latex()
+    mpt.configure(out_format="latex")
     mpt[1 + 1]
     assert capsys.readouterr().out == ""
 
@@ -116,7 +116,7 @@ def test_latex_switch_scopes_to_calling_file(tmp_path):
         "import os\n"
         "import mathprint_main\n"
         "from mathprint import mpt\n"
-        "key = mpt.latex()\n"
+        "key = mpt.configure(out_format='latex')\n"
         "assert key == os.path.abspath(__file__), (key, __file__)\n"
         "assert mathprint_main.Printer.latex_on(os.path.abspath(__file__))\n"
         "print('ok')\n",
@@ -234,7 +234,7 @@ def test_latex_mode_keeps_multiplication_end_to_end(monkeypatch):
     calls = []
     monkeypatch.setattr(ipython_display, "display", lambda obj: calls.append(obj))
 
-    mpt.latex()
+    mpt.configure(out_format="latex")
     a = 2
     b = 0.07
     mpt[a * (b * 3)]

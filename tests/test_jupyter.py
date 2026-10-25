@@ -82,7 +82,7 @@ def test_latex_mode_in_cell(shell):
     result, out = _run(
         shell,
         "from mathprint import mpt\n"
-        "mpt.latex()\n"
+        "mpt.configure(out_format='latex')\n"
         "y = 5\n"
         "z = 10\n"
         "mpt[x := y+z]\n",
@@ -100,7 +100,7 @@ def test_precision_mode_in_cell(shell):
     result, out = _run(
         shell,
         "from mathprint import mpt\n"
-        "mpt.precision(4)\n"
+        "mpt.configure(precision=4)\n"
         "v = 3.123123412\n"
         "mpt[v + 0]\n",
     )
