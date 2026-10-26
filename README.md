@@ -31,6 +31,7 @@ printed value and the macro's return value come from that single evaluation.
 - [LaTeX output](#latex-output)
 - [Display precision](#display-precision)
 - [Number format](#number-format)
+- [Additional raw output](#additional-raw-output)
 - [Nested assignments](#nested-assignments)
 - [Repeated stages](#repeated-stages)
 - [Disabling mathprint (no-op stub)](#disabling-mathprint-no-op-stub)
@@ -105,6 +106,10 @@ mpt[y > (a + z) * 2]
   `1.23e-09` as `1.23*10**-9` and `0.0001106` as `1.106*10**-4`, per file.
   Python's own notation stays the default (`"exp"`). See
   [Number format](#number-format).
+- Optional **additional raw output**: `mpt.configure(additional_out="latex")`
+  (or `"text"`) prints the same expression again as raw LaTeX source or plain
+  Python after the main output. See
+  [Additional raw output](#additional-raw-output).
 - Optional **nested-assignment collapsing**:
   `mpt.configure(multiple_assignment_reduce=True)` shows a chain such as
   `ro1 := (ro := (ro_БФСС := 2230))` as `ro1 := 2230` in the substitution phase.
@@ -347,6 +352,7 @@ mpt.configure(out_order="line", out_format="latex", precision=4)
 | `multiple_assignment_reduce` | `bool` | `False` | collapse a nested assignment chain in phase 2 |
 | `reduce_equ_stages` | `bool` | `False` | drop repeated adjacent stages from a one-line result |
 | `number_format` | `"exp"` \| `"power"` | `"exp"` | Python's notation, or a power of ten |
+| `additional_out` | `"latex"` \| `"text"` \| `None` | `None` | print the lines again as raw LaTeX or plain text |
 
 Every argument is optional, and **an omitted argument is left unchanged** — so
 `mpt.configure(precision=2)` only touches the precision:
@@ -358,6 +364,7 @@ mpt.configure(precision=None)        # full precision again
 mpt.configure(multiple_assignment_reduce=True)  # collapse nested assignments
 mpt.configure(reduce_equ_stages=True)          # drop repeated one-line stages
 mpt.configure(number_format="power")           # 1.23*10**-9 instead of 1.23e-09
+mpt.configure(additional_out="latex")          # raw LaTeX source after the output
 ```
 
 Invalid values raise `ValueError`. The settings are per file (or per notebook in
@@ -527,6 +534,41 @@ notebook) where it is called; `mpt.configure(number_format="exp")` switches back
 
 > If `precision=n` is also set, the rounded number is still normalized: `a` above
 > with `precision=4` shows `1.23*10**-9` in every phase.
+
+---
+
+## Additional raw output
+
+The main output follows `out_format` — plain lines or rendered LaTeX.
+`additional_out` prints the **same lines again, as raw text**, after the main
+output:
+
+```python
+mpt.configure(out_order="line", out_format="latex", additional_out="text")
+mpt[x := 3 + 2]
+# x = 3 + 2 = 3 + 2 = 5     <- rendered LaTeX (displayed)
+# x = 3 + 2 = 3 + 2 = 5     <- raw Python text (printed)
+```
+
+`additional_out="text"` prints the plain Python line; `additional_out="latex"`
+prints the LaTeX source (`$$...$$`) instead of rendering it — handy for copying
+into a document or a Markdown cell:
+
+```python
+mpt.configure(out_order="line", additional_out="latex")
+mpt[x := 3 + 2]
+# x = 3 + 2 = 3 + 2 = 5                    <- main output (plain by default)
+# $$x=3+2=3+2=5$$                          <- raw LaTeX source
+```
+
+Every other setting applies unchanged: the layout (`out_order`), `precision`,
+`number_format`, `multiple_assignment_reduce` and `reduce_equ_stages`. So the
+additional output is exactly the same expression, just never rendered and in
+the chosen representation.
+
+The default is `None`, which adds nothing.
+`mpt.configure(additional_out=None)` switches it back off. If LaTeX cannot
+convert a line, the raw Python line is printed in its place.
 
 ---
 

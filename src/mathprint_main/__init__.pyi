@@ -34,6 +34,7 @@ class _Macro:
         multiple_assignment_reduce: bool = ...,
         reduce_equ_stages: bool = ...,
         number_format: Literal["exp", "power"] = ...,
+        additional_out: Literal["latex", "text"] | None = ...,
     ) -> str:
         """Change the display settings for the file (or notebook) this is called in.
 
@@ -66,6 +67,11 @@ class _Macro:
                 ``1.23*10**-9``, and a plain decimal far from ``1`` (below
                 ``10**-4`` or at/above ``10**16``) is normalized, e.g.
                 ``0.0001106`` -> ``1.106*10**-4``. Applies to every phase.
+            additional_out: ``None`` (default) adds nothing. ``"latex"`` prints
+                the same lines again, after the main output, as raw LaTeX
+                source; ``"text"`` prints them as the plain Python line. The
+                additional output is never rendered and uses all other settings
+                unchanged.
 
         Returns:
             The scope key that changed: the file's absolute path, or
@@ -97,6 +103,8 @@ class Latex:
     @staticmethod
     def show(text: str) -> None: ...
     @staticmethod
+    def render(text: str) -> str | None: ...
+    @staticmethod
     def _to_input(text: str) -> str: ...
     @staticmethod
     def _patch_pytexit() -> None: ...
@@ -110,6 +118,7 @@ class Printer:
     multiple_assignment_reduce_scopes: set[str]
     reduce_equ_stages_scopes: set[str]
     power_number_scopes: set[str]
+    additional_out_scopes: dict[str, Literal["latex", "text"]]
     OPAQUE_TYPES: tuple[type, ...]
     @classmethod
     def key_of(cls, filename: Any) -> str: ...
@@ -128,6 +137,8 @@ class Printer:
     @classmethod
     def set_number_format(cls, key: str, number_format: Literal["exp", "power"] = ...) -> str: ...
     @classmethod
+    def set_additional_out(cls, key: str, additional_out: Literal["latex", "text"] | None = ...) -> str: ...
+    @classmethod
     def line_on(cls, key: str) -> bool: ...
     @classmethod
     def latex_on(cls, key: str) -> bool: ...
@@ -140,6 +151,8 @@ class Printer:
     @classmethod
     def number_format_of(cls, key: str) -> Literal["exp", "power"]: ...
     @classmethod
+    def additional_out_of(cls, key: str) -> Literal["latex", "text"] | None: ...
+    @classmethod
     def render(cls, key: str, name: str, value: Any) -> str: ...
     @classmethod
     def text(cls, key: str, value: Any) -> str: ...
@@ -149,6 +162,8 @@ class Printer:
     def substituted(cls, key: str, normal: str, reduced: str, *values: str) -> str: ...
     @classmethod
     def emit(cls, key: str, text: str) -> None: ...
+    @classmethod
+    def emit_raw(cls, text: str, out_format: Literal["latex", "text"]) -> None: ...
     @classmethod
     def show(cls, key: str, name: str, source: str, substituted: str, value: Any) -> Any: ...
 
@@ -178,4 +193,5 @@ def _configure(
     multiple_assignment_reduce: bool = ...,
     reduce_equ_stages: bool = ...,
     number_format: Literal["exp", "power"] = ...,
+    additional_out: Literal["latex", "text"] | None = ...,
 ) -> str: ...

@@ -32,6 +32,8 @@ numbers with ``n`` significant digits::
 ``reduce_equ_stages=True`` drops repeated adjacent stages from a one-line result.
 ``number_format="power"`` shows ``1.23e-09`` as ``1.23*10**-9`` and
 ``0.0001106`` as ``1.106*10**-4`` instead.
+``additional_out="latex"`` (or ``"text"``) prints the same lines again after the
+main output, as raw LaTeX source or plain Python.
 
 Unload with::
 

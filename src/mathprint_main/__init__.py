@@ -101,8 +101,13 @@ value; ``precision=None`` restores the default.
 phase 2 (``ro1 := 2230``); phase 1 still shows the chain as written.
 ``reduce_equ_stages=True`` drops repeated adjacent stages from a one-line result
 (``ro1 = (ro := (...)) = 2230 = 2230`` becomes ``ro1 = (ro := (...)) = 2230``).
-``number_format="power"`` shows a plain real number that ``str`` would print as
-``1.23e-09`` as ``1.23*10**-9``.
+``number_format="power"`` shows real numbers with a power of ten: scientific
+notation becomes ``1.23*10**-9`` and a plain decimal far from ``1`` (below
+``10**-4`` or at/above ``10**16``) is normalized, e.g. ``0.0001106`` ->
+``1.106*10**-4``; it applies to all three phases.
+``additional_out="latex"`` (or ``"text"``) prints the same lines again, after the
+main output, as raw LaTeX source or plain Python; ``None`` (the default) adds
+nothing.
 ``mpt.configure(...)`` returns the scope key it changed.
 
 **How the code is laid out.** The work is a short pipeline of single-purpose
@@ -303,13 +308,27 @@ class Latex:
         Some operators (e.g. ``and``) are not convertible; then the line is
         printed, so one expression cannot break the run.
         """
+        tex = Latex.render(text)
+        if tex is None:
+            print(text)
+            return
         from IPython.display import Latex as _IpythonLatex, display
 
+        display(_IpythonLatex(tex))
+
+    @staticmethod
+    def render(text):
+        """Return `text` as a LaTeX string, or ``None`` if it cannot be converted.
+
+        This is the raw LaTeX source (``$$...$$``), not displayed; it also backs
+        ``additional_out="latex"``. Only ``pytexit`` is needed, so it works
+        outside Jupyter too.
+        """
         from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
 
         Latex._patch_pytexit()
         try:
-            tex = py2tex(
+            return py2tex(
                 Latex._to_input(text),
                 print_latex=False,
                 print_formula=False,
@@ -321,9 +340,7 @@ class Latex:
                 simplify_multipliers=False,
             )
         except Exception:
-            print(text)
-            return
-        display(_IpythonLatex(tex))
+            return None
 
     @staticmethod
     def _to_input(text):
@@ -429,13 +446,15 @@ class Printer:
     * whether a one-line result drops repeated stages
       (``mpt.configure(reduce_equ_stages=True)``), and
     * the number format -- ``str``'s scientific notation (default) or a power
-      of ten (``mpt.configure(number_format="power")``).
+      of ten (``mpt.configure(number_format="power")``), and
+    * an additional raw output after the main one
+      (``mpt.configure(additional_out="latex" | "text")``).
 
     So the settings never leak between files. They live in :attr:`line_scopes`,
     :attr:`latex_scopes`, :attr:`precision_scopes`,
     :attr:`multiple_assignment_reduce_scopes`,
-    :attr:`reduce_equ_stages_scopes` and :attr:`power_number_scopes`; the
-    ``key_of*`` methods
+    :attr:`reduce_equ_stages_scopes`, :attr:`power_number_scopes` and
+    :attr:`additional_out_scopes`; the ``key_of*`` methods
     map a file or a live module to a scope key; and :meth:`render`, :meth:`text`,
     :meth:`emit` and :meth:`show` are the runtime hooks the expanded code calls
     (see :class:`Expander`).
@@ -464,6 +483,11 @@ class Printer:
     #: Scope keys that show scientific notation as a power of ten
     #: (see ``number_format="power"``).
     power_number_scopes = set()
+
+    #: Scope keys that print an additional raw line after the main output:
+    #: ``"latex"`` (LaTeX source) or ``"text"`` (the Python line). Missing means
+    #: no additional output (see ``additional_out=...``).
+    additional_out_scopes = {}
 
     #: Values whose ``str`` repr is noise (``<function f at 0x…>``,
     #: ``<class 'int'>``, ``<module 'math' …>``). For these, phase 2 keeps the
@@ -561,6 +585,15 @@ class Printer:
         return key
 
     @classmethod
+    def set_additional_out(cls, key, additional_out=None):
+        """Set `key`'s extra raw output: ``"latex"``, ``"text"`` or ``None``."""
+        if additional_out is None:
+            cls.additional_out_scopes.pop(key, None)
+        else:
+            cls.additional_out_scopes[key] = additional_out
+        return key
+
+    @classmethod
     def line_on(cls, key):
         """Whether `key` (or every file, via ``ANY_FILE``) uses one-line layout."""
         return cls.ANY_FILE in cls.line_scopes or key in cls.line_scopes
@@ -597,6 +630,13 @@ class Printer:
         if cls.ANY_FILE in cls.power_number_scopes or key in cls.power_number_scopes:
             return "power"
         return "exp"
+
+    @classmethod
+    def additional_out_of(cls, key):
+        """`key`'s additional raw output: ``"latex"``, ``"text"`` or ``None``."""
+        return cls.additional_out_scopes.get(
+            key, cls.additional_out_scopes.get(cls.ANY_FILE)
+        )
 
     # --- the runtime hooks (called by the expanded code) --------------------
 
@@ -668,6 +708,20 @@ class Printer:
             print(text)
 
     @classmethod
+    def emit_raw(cls, text, out_format):
+        """Print one line raw: LaTeX source, or the plain Python line.
+
+        ``additional_out`` never renders: ``"latex"`` prints the ``py2tex``
+        result itself (falling back to `text` if it cannot convert), and
+        ``"text"`` prints the Python line.
+        """
+        if out_format == "latex":
+            tex = Latex.render(text)
+            print(text if tex is None else tex)
+        else:
+            print(text)
+
+    @classmethod
     def show(cls, key, name, source, substituted, value):
         """Show the whole call -- source, substitution and value -- and return it.
 
@@ -679,26 +733,46 @@ class Printer:
         it (everything up to the first ``:=``). With ``reduce_equ_stages=True``
         adjacent equal stages are collapsed, so ``... = 2230 = 2230`` becomes
         ``... = 2230``.
+
+        With ``additional_out=...`` the same lines are printed again after the
+        main output as raw text: LaTeX source (``"latex"``) or Python
+        (``"text"``). All other settings apply to it unchanged.
         """
         shown = cls.text(key, value)
         if cls.number_format_of(key) == "power":
             # Phase 1 is the source, whose numeric literals are shown in the
             # same format (the template for phase 2 does this in `substituted`).
             source = Numbers.to_power(source)
+        for line in cls._stages(
+            key, name, source, substituted, shown, cls.latex_on(key)
+        ):
+            cls.emit(key, line)
+        additional = cls.additional_out_of(key)
+        if additional is not None:
+            for line in cls._stages(
+                key, name, source, substituted, shown, additional == "latex"
+            ):
+                cls.emit_raw(line, additional)
+        return value
+
+    @classmethod
+    def _stages(cls, key, name, source, substituted, shown, latex):
+        """The lines to show: one joined line, or the three column lines.
+
+        `latex` chooses the one-line joiner (``==`` is what ``py2tex`` renders as
+        ``=``); it does not render anything, so the same lines serve plain
+        output and the raw ``additional_out`` variant.
+        """
         if cls.line_on(key):
             if name:
                 source = source.split(":=", 1)[1].strip()
                 substituted = substituted.split(":=", 1)[1].strip()
-            joiner = " == " if cls.latex_on(key) else " = "
+            joiner = " == " if latex else " = "
             parts = ([name] if name else []) + [source, substituted, shown]
             if cls.reduce_equ_stages_on(key):
                 parts = cls._without_repeated_stages(parts)
-            cls.emit(key, joiner.join(parts))
-        else:
-            cls.emit(key, source)
-            cls.emit(key, substituted)
-            cls.emit(key, f"{name} := {shown}" if name else shown)
-        return value
+            return [joiner.join(parts)]
+        return [source, substituted, f"{name} := {shown}" if name else shown]
 
     @staticmethod
     def _without_repeated_stages(parts):
@@ -978,7 +1052,7 @@ _UNSET = object()
 
 def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET,
                multiple_assignment_reduce=_UNSET, reduce_equ_stages=_UNSET,
-               number_format=_UNSET):
+               number_format=_UNSET, additional_out=_UNSET):
     """Change the display settings for the file (or notebook) this is called in.
 
     The settings apply to every ``mpt[...]`` in the calling scope -- the file,
@@ -1008,6 +1082,10 @@ def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET,
             notation becomes ``1.23*10**-9`` and a plain decimal far from ``1``
             (below ``10**-4`` or at/above ``10**16``) is normalized, e.g.
             ``0.0001106`` -> ``1.106*10**-4``. Applies to every phase.
+        additional_out: ``None`` (default) adds nothing. ``"latex"`` prints the
+            same lines again, after the main output, as raw LaTeX source;
+            ``"text"`` prints them as the plain Python line. The additional
+            output is never rendered and uses every other setting unchanged.
 
     Returns:
         The scope key that changed: the file's absolute path, or ``"<ipython>"``
@@ -1049,6 +1127,12 @@ def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET,
                 'mpt.configure(number_format=...) expects "exp" or "power"'
             )
         Printer.set_number_format(key, number_format)
+    if additional_out is not _UNSET:
+        if additional_out not in (None, "latex", "text"):
+            raise ValueError(
+                'mpt.configure(additional_out=...) expects "latex", "text" or None'
+            )
+        Printer.set_additional_out(key, additional_out)
     return key
 
 

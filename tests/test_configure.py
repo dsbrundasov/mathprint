@@ -28,6 +28,7 @@ def restore_settings():
         set(mathprint_main.Printer.multiple_assignment_reduce_scopes),
         set(mathprint_main.Printer.reduce_equ_stages_scopes),
         set(mathprint_main.Printer.power_number_scopes),
+        dict(mathprint_main.Printer.additional_out_scopes),
     )
     mathprint_main.Printer.line_scopes.clear()
     mathprint_main.Printer.latex_scopes.clear()
@@ -35,6 +36,7 @@ def restore_settings():
     mathprint_main.Printer.multiple_assignment_reduce_scopes.clear()
     mathprint_main.Printer.reduce_equ_stages_scopes.clear()
     mathprint_main.Printer.power_number_scopes.clear()
+    mathprint_main.Printer.additional_out_scopes.clear()
     yield
     mathprint_main.Printer.line_scopes.clear()
     mathprint_main.Printer.line_scopes.update(saved[0])
@@ -48,6 +50,8 @@ def restore_settings():
     mathprint_main.Printer.reduce_equ_stages_scopes.update(saved[4])
     mathprint_main.Printer.power_number_scopes.clear()
     mathprint_main.Printer.power_number_scopes.update(saved[5])
+    mathprint_main.Printer.additional_out_scopes.clear()
+    mathprint_main.Printer.additional_out_scopes.update(saved[6])
 
 
 # --- Defaults ---------------------------------------------------------------
@@ -59,6 +63,7 @@ def test_defaults():
     assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
     assert not mathprint_main.Printer.reduce_equ_stages_on(_HERE)
     assert mathprint_main.Printer.number_format_of(_HERE) == "exp"
+    assert mathprint_main.Printer.additional_out_of(_HERE) is None
 
 
 # --- Grouped call -----------------------------------------------------------
@@ -75,6 +80,7 @@ def test_applies_several_options_at_once():
         multiple_assignment_reduce=True,
         reduce_equ_stages=True,
         number_format="power",
+        additional_out="latex",
     ) == _HERE
     assert mathprint_main.Printer.line_on(_HERE)
     assert mathprint_main.Printer.latex_on(_HERE)
@@ -82,6 +88,7 @@ def test_applies_several_options_at_once():
     assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
     assert mathprint_main.Printer.reduce_equ_stages_on(_HERE)
     assert mathprint_main.Printer.number_format_of(_HERE) == "power"
+    assert mathprint_main.Printer.additional_out_of(_HERE) == "latex"
 
 
 def test_no_arguments_changes_nothing():
@@ -92,6 +99,7 @@ def test_no_arguments_changes_nothing():
         multiple_assignment_reduce=True,
         reduce_equ_stages=True,
         number_format="power",
+        additional_out="text",
     )
     assert mpt.configure() == _HERE
     assert mathprint_main.Printer.line_on(_HERE)
@@ -100,6 +108,7 @@ def test_no_arguments_changes_nothing():
     assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
     assert mathprint_main.Printer.reduce_equ_stages_on(_HERE)
     assert mathprint_main.Printer.number_format_of(_HERE) == "power"
+    assert mathprint_main.Printer.additional_out_of(_HERE) == "text"
 
 
 # --- Omitted options stay unchanged ----------------------------------------
@@ -112,6 +121,7 @@ def test_omitted_option_stays_unchanged():
         multiple_assignment_reduce=True,
         reduce_equ_stages=True,
         number_format="power",
+        additional_out="text",
     )
     mpt.configure(precision=2)
     assert mathprint_main.Printer.line_on(_HERE)
@@ -120,6 +130,7 @@ def test_omitted_option_stays_unchanged():
     assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
     assert mathprint_main.Printer.reduce_equ_stages_on(_HERE)
     assert mathprint_main.Printer.number_format_of(_HERE) == "power"
+    assert mathprint_main.Printer.additional_out_of(_HERE) == "text"
 
 
 def test_each_option_can_be_set_alone():
@@ -130,6 +141,7 @@ def test_each_option_can_be_set_alone():
     assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
     assert not mathprint_main.Printer.reduce_equ_stages_on(_HERE)
     assert mathprint_main.Printer.number_format_of(_HERE) == "exp"
+    assert mathprint_main.Printer.additional_out_of(_HERE) is None
 
     mpt.configure(out_format="latex")
     assert mathprint_main.Printer.line_on(_HERE)
@@ -138,6 +150,7 @@ def test_each_option_can_be_set_alone():
     assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
     assert not mathprint_main.Printer.reduce_equ_stages_on(_HERE)
     assert mathprint_main.Printer.number_format_of(_HERE) == "exp"
+    assert mathprint_main.Printer.additional_out_of(_HERE) is None
 
     mpt.configure(precision=4)
     assert mathprint_main.Printer.line_on(_HERE)
@@ -146,6 +159,7 @@ def test_each_option_can_be_set_alone():
     assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
     assert not mathprint_main.Printer.reduce_equ_stages_on(_HERE)
     assert mathprint_main.Printer.number_format_of(_HERE) == "exp"
+    assert mathprint_main.Printer.additional_out_of(_HERE) is None
 
     mpt.configure(multiple_assignment_reduce=True)
     assert mathprint_main.Printer.line_on(_HERE)
@@ -154,6 +168,7 @@ def test_each_option_can_be_set_alone():
     assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
     assert not mathprint_main.Printer.reduce_equ_stages_on(_HERE)
     assert mathprint_main.Printer.number_format_of(_HERE) == "exp"
+    assert mathprint_main.Printer.additional_out_of(_HERE) is None
 
     mpt.configure(reduce_equ_stages=True)
     assert mathprint_main.Printer.line_on(_HERE)
@@ -162,6 +177,7 @@ def test_each_option_can_be_set_alone():
     assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
     assert mathprint_main.Printer.reduce_equ_stages_on(_HERE)
     assert mathprint_main.Printer.number_format_of(_HERE) == "exp"
+    assert mathprint_main.Printer.additional_out_of(_HERE) is None
 
     mpt.configure(number_format="power")
     assert mathprint_main.Printer.line_on(_HERE)
@@ -170,6 +186,16 @@ def test_each_option_can_be_set_alone():
     assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
     assert mathprint_main.Printer.reduce_equ_stages_on(_HERE)
     assert mathprint_main.Printer.number_format_of(_HERE) == "power"
+    assert mathprint_main.Printer.additional_out_of(_HERE) is None
+
+    mpt.configure(additional_out="latex")
+    assert mathprint_main.Printer.line_on(_HERE)
+    assert mathprint_main.Printer.latex_on(_HERE)
+    assert mathprint_main.Printer.precision_of(_HERE) == 4
+    assert mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
+    assert mathprint_main.Printer.reduce_equ_stages_on(_HERE)
+    assert mathprint_main.Printer.number_format_of(_HERE) == "power"
+    assert mathprint_main.Printer.additional_out_of(_HERE) == "latex"
 
 
 # --- Turning options back off ----------------------------------------------
@@ -182,6 +208,7 @@ def test_values_can_be_restored():
         multiple_assignment_reduce=True,
         reduce_equ_stages=True,
         number_format="power",
+        additional_out="latex",
     )
     mpt.configure(
         out_order="column",
@@ -190,6 +217,7 @@ def test_values_can_be_restored():
         multiple_assignment_reduce=False,
         reduce_equ_stages=False,
         number_format="exp",
+        additional_out=None,
     )
     assert not mathprint_main.Printer.line_on(_HERE)
     assert not mathprint_main.Printer.latex_on(_HERE)
@@ -197,6 +225,7 @@ def test_values_can_be_restored():
     assert not mathprint_main.Printer.multiple_assignment_reduce_on(_HERE)
     assert not mathprint_main.Printer.reduce_equ_stages_on(_HERE)
     assert mathprint_main.Printer.number_format_of(_HERE) == "exp"
+    assert mathprint_main.Printer.additional_out_of(_HERE) is None
 
 
 # --- Validation -------------------------------------------------------------
@@ -235,6 +264,12 @@ def test_rejects_unknown_number_format():
     with pytest.raises(ValueError, match="number_format"):
         mpt.configure(number_format="si")  # pyright: ignore[reportArgumentType]
     assert mathprint_main.Printer.number_format_of(_HERE) == "exp"
+
+
+def test_rejects_unknown_additional_out():
+    with pytest.raises(ValueError, match="additional_out"):
+        mpt.configure(additional_out="html")  # pyright: ignore[reportArgumentType]
+    assert mathprint_main.Printer.additional_out_of(_HERE) is None
 
 
 def test_rejects_positional_arguments():
