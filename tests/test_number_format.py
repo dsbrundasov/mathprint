@@ -1,14 +1,15 @@
 """Tests for ``mpt.configure(number_format=...)``.
 
-``"exp"`` (the default) keeps ``str``'s scientific notation (``1.23e-09``).
-``"power"`` shows a plain real number that would use that notation as a power
-of ten instead::
+``"exp"`` (the default) keeps ``str``'s representation (``1.23e-09``).
+``"power"`` shows real numbers with a power of ten::
 
     a = 1.23e-9
-    mpt[a]      # 1.23*10**-9  (phase 2 and phase 3)
+    mpt[a]      # 1.23*10**-9  (all three phases)
 
-Only plain real numbers (``int``, ``float``, ``Decimal``, ``Fraction``; not
-``bool``) are rewritten, and only text that actually contains an exponent.
+A plain decimal far from ``1`` is normalized as well (``0.0001106`` ->
+``1.106*10**-4``), even when Python would print it without an exponent. Only
+plain real numbers (``int``, ``float``, ``Decimal``, ``Fraction``; not ``bool``)
+are rewritten; string contents and complex numbers are not.
 """
 
 import os
@@ -94,7 +95,8 @@ def test_power_in_line_mode(capsys):
 def test_power_applies_to_plain_values(capsys):
     mpt.configure(number_format="power")
     mpt[1e20]
-    assert _lines(capsys) == ["1e20", "1e20", "1*10**20"]
+    # The source literal is rewritten as well as the substituted value.
+    assert _lines(capsys) == ["1*10**20", "1*10**20", "1*10**20"]
 
 
 # --- Exponent normalization -------------------------------------------------
@@ -129,6 +131,43 @@ def test_decimal_large_exponent(capsys):
     assert _lines(capsys)[-1] == "1.23456*10**20"
 
 
+def test_small_plain_number_is_normalized(capsys):
+    # Not scientific in ``str``, but far enough from 1 to use the power form.
+    mpt.configure(number_format="power")
+    mpt[0.0001106]
+    assert _lines(capsys) == [
+        "1.106*10**-4", "1.106*10**-4", "1.106*10**-4"
+    ]
+
+
+def test_small_decimal_is_normalized(capsys):
+    mpt.configure(number_format="power")
+    mpt[Decimal("0.0001106")]
+    assert _lines(capsys)[-1] == "1.106*10**-4"
+
+
+def test_source_literals_are_rewritten(capsys):
+    mpt.configure(number_format="power")
+    mpt[2.4e-6 * 1]
+    assert _lines(capsys) == [
+        "2.4*10**-6 * 1",
+        "2.4*10**-6 * 1",
+        "2.4*10**-6",
+    ]
+
+
+def test_smallest_plain_decimal_is_rewritten(capsys):
+    mpt.configure(number_format="power")
+    mpt[0.0001]
+    assert _lines(capsys)[-1] == "1*10**-4"
+
+
+def test_plain_decimal_above_the_threshold_is_untouched(capsys):
+    mpt.configure(number_format="power")
+    mpt[0.001]
+    assert _lines(capsys) == ["0.001", "0.001", "0.001"]
+
+
 # --- Values without scientific notation stay as they are --------------------
 
 @pytest.mark.parametrize("value, expected", [
@@ -149,7 +188,13 @@ def test_strings_are_not_rewritten(capsys):
     mpt.configure(number_format="power")
     text = "1e-9"
     mpt[text]
-    assert _lines(capsys)[-1] == "1e-9"
+    assert _lines(capsys) == ["text", "1e-9", "1e-9"]
+
+
+def test_string_literal_in_the_source_is_not_rewritten(capsys):
+    mpt.configure(number_format="power")
+    mpt["1e-9"]
+    assert _lines(capsys) == ['"1e-9"', '"1e-9"', "1e-9"]
 
 
 def test_complex_is_not_rewritten(capsys):
@@ -166,12 +211,19 @@ def test_bool_is_not_rewritten(capsys):
 
 # --- Interaction with precision --------------------------------------------
 
-def test_precision_output_passes_through(capsys):
+def test_precision_output_is_converted_to_power(capsys):
     mpt.configure(precision=4, number_format="power")
     a = 1.23e-9
     mpt[a]
-    # Precision shows plain decimal digits, so there is no exponent to rewrite.
-    assert _lines(capsys) == ["a", "0.00000000123", "0.00000000123"]
+    # Precision's plain decimal is normalized to a power of ten as well.
+    assert _lines(capsys) == ["a", "1.23*10**-9", "1.23*10**-9"]
+
+
+def test_precision_large_number_is_normalized(capsys):
+    mpt.configure(precision=4, number_format="power")
+    a = 1.23e20
+    mpt[a]
+    assert _lines(capsys) == ["a", "1.23*10**20", "1.23*10**20"]
 
 
 # --- LaTeX ----------------------------------------------------------------

@@ -61,9 +61,11 @@ class _Macro:
                 one-line result: ``ro1 = (ro := (...)) = 2230 = 2230`` becomes
                 ``ro1 = (ro := (...)) = 2230``. Has no effect in column mode.
                 Default ``False``.
-            number_format: ``"exp"`` (default) keeps ``str``'s scientific
-                notation (``1.23e-09``); ``"power"`` shows plain real numbers as
-                a power of ten instead (``1.23*10**-9``).
+            number_format: ``"exp"`` (default) leaves numbers as ``str`` shows
+                them; ``"power"`` uses a power of ten: ``1.23e-09`` becomes
+                ``1.23*10**-9``, and a plain decimal far from ``1`` (below
+                ``10**-4`` or at/above ``10**16``) is normalized, e.g.
+                ``0.0001106`` -> ``1.106*10**-4``. Applies to every phase.
 
         Returns:
             The scope key that changed: the file's absolute path, or

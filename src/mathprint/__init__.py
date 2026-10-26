@@ -49,8 +49,9 @@ Display options are grouped in ``mpt.configure(...)``, which applies to the file
 digits (or ``None`` to restore the default); ``multiple_assignment_reduce=True``
 collapses a nested assignment chain in the substitution phase;
 ``reduce_equ_stages=True`` drops repeated adjacent stages from a one-line result;
-``number_format="power"`` shows a number that ``str`` would print as
-``1.23e-09`` as ``1.23*10**-9`` instead of the default ``"exp"``.
+``number_format="power"`` shows numbers with a power of ten: ``1.23e-09`` as
+``1.23*10**-9``, and ``0.0001106`` as ``1.106*10**-4`` instead of the default
+``"exp"``.
 Omitted arguments are left unchanged.
 """
 

@@ -101,9 +101,10 @@ mpt[y > (a + z) * 2]
 - Optional **display precision**: `mpt.configure(precision=n)` shows numbers with
   `n` significant digits, per file, without affecting the computed value. See
   [Display precision](#display-precision).
-- Optional **number format**: `mpt.configure(number_format="power")` shows a number
-  that `str` would print as `1.23e-09` as `1.23*10**-9`, per file. Scientific
-  notation stays the default (`"exp"`). See [Number format](#number-format).
+- Optional **number format**: `mpt.configure(number_format="power")` shows
+  `1.23e-09` as `1.23*10**-9` and `0.0001106` as `1.106*10**-4`, per file.
+  Python's own notation stays the default (`"exp"`). See
+  [Number format](#number-format).
 - Optional **nested-assignment collapsing**:
   `mpt.configure(multiple_assignment_reduce=True)` shows a chain such as
   `ro1 := (ro := (ro_БФСС := 2230))` as `ro1 := 2230` in the substitution phase.
@@ -345,7 +346,7 @@ mpt.configure(out_order="line", out_format="latex", precision=4)
 | `precision` | `int` \| `None` | `None` (full) | significant digits shown; `None` resets |
 | `multiple_assignment_reduce` | `bool` | `False` | collapse a nested assignment chain in phase 2 |
 | `reduce_equ_stages` | `bool` | `False` | drop repeated adjacent stages from a one-line result |
-| `number_format` | `"exp"` \| `"power"` | `"exp"` | scientific notation, or a power of ten |
+| `number_format` | `"exp"` \| `"power"` | `"exp"` | Python's notation, or a power of ten |
 
 Every argument is optional, and **an omitted argument is left unchanged** — so
 `mpt.configure(precision=2)` only touches the precision:
@@ -489,9 +490,9 @@ is called. `mpt.configure(precision=None)` restores the default.
 
 ## Number format
 
-By default numbers are shown with Python's own scientific notation, so a small
-value such as `1.23e-9` prints as `1.23e-09`. Set `number_format="power"` to show
-such a number as a power of ten instead:
+By default numbers are shown as Python prints them, so a small value such as
+`1.23e-9` appears as `1.23e-09`. Set `number_format="power"` to show such a
+number as a power of ten instead:
 
 ```python
 from mathprint import mpt
@@ -504,11 +505,19 @@ mpt[a]
 # 1.23*10**-9
 ```
 
-The exponent is normalized: no `+` sign and no leading zeros
-(`1e+20` → `1*10**20`, `1.5e-05` → `1.5*10**-5`). Numbers that do not use
-scientific notation are untouched (`2230`, `12345.678`, `0.001`), and so are
-values that are not plain real numbers — strings, complex numbers, symbolic
-objects. `bool` is excluded as well.
+Two kinds of numbers are rewritten:
+
+- anything already in scientific notation — the exponent loses a `+` sign and
+  leading zeros (`1e+20` → `1*10**20`, `1.5e-05` → `1.5*10**-5`);
+- a plain decimal that is far from `1` — below `10**-4` or at/above `10**16` —
+  is normalized, even if Python would print it without an exponent:
+  `0.0001106` → `1.106*10**-4`, `7.5931e-05` → `7.5931*10**-5`.
+
+The rule covers all three phases: a numeric literal in the source and in the
+substitution is rewritten as well, not just the final value. Short numbers are
+untouched (`2230`, `12345.678`, `0.001`, `0.00282`), and so are values that are
+not plain real numbers — strings, complex numbers, symbolic objects. `bool` is
+excluded as well.
 
 This affects only the display: the expression is still evaluated and returned
 with its original value.
@@ -516,9 +525,8 @@ with its original value.
 `"exp"` is the default and changes nothing. The setting is scoped to the file (or
 notebook) where it is called; `mpt.configure(number_format="exp")` switches back.
 
-> If `precision=n` is also set, numbers are shown with plain decimal digits
-> (`0.00000000123`), so there is no exponent left to rewrite. `number_format`
-> only transforms text that would otherwise contain scientific notation.
+> If `precision=n` is also set, the rounded number is still normalized: `a` above
+> with `precision=4` shows `1.23*10**-9` in every phase.
 
 ---
 

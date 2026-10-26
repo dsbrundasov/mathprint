@@ -125,9 +125,11 @@ back into the class methods: ``Printer.render`` (one substituted name) and
 import ast
 import decimal
 import importlib.util
+import io
 import os
 import re
 import sys
+import tokenize
 import types
 from fractions import Fraction
 
@@ -171,20 +173,85 @@ class Numbers:
             return f"{real}{'-' if value.imag < 0 else '+'}{imag}j"
         return Numbers._real(value, digits)
 
-    #: Scientific notation as produced by ``str`` / ``format`` on a number.
-    _SCIENTIFIC = re.compile(r"(\d+(?:\.\d+)?)[eE]([+-]?\d+)")
+    #: A plain decimal number, as ``tokenize`` reports a ``NUMBER`` token.
+    _PLAIN_NUMBER = re.compile(r"(?:\d+(?:\.\d+)?|\.\d+)\Z")
+    #: Scientific notation, as ``tokenize`` reports a ``NUMBER`` token.
+    _SCIENTIFIC_NUMBER = re.compile(
+        r"(?P<mantissa>\d+(?:\.\d+)?|\.\d+)[eE](?P<exponent>[+-]?\d+)\Z"
+    )
+    #: A displayed decimal below this power of ten uses the ``*10**`` form.
+    SMALLEST_PLAIN_EXPONENT = -4
+    #: A displayed decimal at or above this power of ten uses the ``*10**`` form.
+    LARGEST_PLAIN_EXPONENT = 16
 
     @staticmethod
     def to_power(text):
-        """Rewrite scientific notation as a power of ten.
+        """Rewrite the numbers in `text` as powers of ten.
 
-        ``"1.23e-09"`` -> ``"1.23*10**-9"``; the exponent loses a sign ``+``
-        and leading zeros. Text without scientific notation is returned as is.
+        Only ``NUMBER`` tokens are touched, so names (``ro_Si3N4``) and string
+        contents are left alone. Two kinds of number are rewritten:
+
+        * anything already written in scientific notation --
+          ``"1.23e-09"`` -> ``"1.23*10**-9"`` (the exponent loses a sign ``+``
+          and leading zeros);
+        * a plain decimal that is far from ``1`` -- below ``10**-4`` or at or
+          above ``10**16`` -- is normalized:
+          ``"0.0001106"`` -> ``"1.106*10**-4"``.
+
+        Everything else is returned as written.
         """
-        def replace(match):
-            return f"{match.group(1)}*10**{int(match.group(2))}"
+        try:
+            tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
+        except (tokenize.TokenError, IndentationError, SyntaxError):
+            return text
 
-        return Numbers._SCIENTIFIC.sub(replace, text)
+        lines = text.splitlines(keepends=True)
+        starts = [0]
+        for line in lines:
+            starts.append(starts[-1] + len(line))
+
+        def offset(position):
+            row, column = position
+            return starts[row - 1] + column
+
+        replacements = []
+        for token in tokens:
+            if token.type != tokenize.NUMBER:
+                continue
+            rewritten = Numbers._number_as_power(token.string)
+            if rewritten != token.string:
+                replacements.append(
+                    (offset(token.start), offset(token.end), rewritten)
+                )
+
+        # Splice from the end, so earlier offsets stay valid.
+        for start, end, rewritten in reversed(replacements):
+            text = text[:start] + rewritten + text[end:]
+        return text
+
+    @staticmethod
+    def _number_as_power(token):
+        """Rewrite one ``NUMBER`` token, or return it unchanged."""
+        scientific = Numbers._SCIENTIFIC_NUMBER.match(token)
+        if scientific:
+            mantissa = scientific.group("mantissa")
+            exponent = int(scientific.group("exponent"))
+            return f"{mantissa}*10**{exponent}"
+        if not Numbers._PLAIN_NUMBER.match(token):
+            return token
+        value = decimal.Decimal(token)
+        if value == 0:
+            return token
+        exponent = value.adjusted()
+        if not (
+            exponent <= Numbers.SMALLEST_PLAIN_EXPONENT
+            or exponent >= Numbers.LARGEST_PLAIN_EXPONENT
+        ):
+            return token
+        with decimal.localcontext() as ctx:
+            ctx.prec = max(28, len(value.as_tuple().digits) + 1)
+            mantissa = value.scaleb(-exponent).normalize()
+        return f"{format(mantissa, 'f')}*10**{exponent}"
 
     @staticmethod
     def _real(value, digits):
@@ -553,9 +620,10 @@ class Printer:
     def text(cls, key, value):
         """`value` as shown (``str``, with the scope's precision applied).
 
-        With ``number_format="power"`` a plain real number that would be shown
-        in scientific notation is shown as a power of ten instead:
-        ``1.23*10**-9`` rather than ``1.23e-09``.
+        With ``number_format="power"`` a plain real number is shown with a power
+        of ten when it is written in scientific notation (``1.23*10**-9`` rather
+        than ``1.23e-09``) or when it is far from ``1``
+        (``0.0001106`` -> ``1.106*10**-4``).
         """
         digits = cls.precision_of(key)
         if digits is not None:
@@ -581,8 +649,14 @@ class Printer:
         chain collapsed to the innermost value (``ro1 := 2230``). Which one is
         used is a runtime setting, so the macro passes both; `values` are the
         rendered occurrences, evaluated once and shared by both templates.
+
+        The template is formatted on its own, before the rendered values are
+        inserted, so ``number_format="power"`` rewrites the source's numeric
+        literals without touching a substituted string value.
         """
         template = reduced if cls.multiple_assignment_reduce_on(key) else normal
+        if cls.number_format_of(key) == "power":
+            template = Numbers.to_power(template)
         return template.format(*values)
 
     @classmethod
@@ -607,6 +681,10 @@ class Printer:
         ``... = 2230``.
         """
         shown = cls.text(key, value)
+        if cls.number_format_of(key) == "power":
+            # Phase 1 is the source, whose numeric literals are shown in the
+            # same format (the template for phase 2 does this in `substituted`).
+            source = Numbers.to_power(source)
         if cls.line_on(key):
             if name:
                 source = source.split(":=", 1)[1].strip()
@@ -802,12 +880,16 @@ class Expander:
 
         inner = self._innermost_assignment_value(expr) if name else None
         if inner is None:
-            substituted = ast.Call(func=ast.Attribute(
-                    value=ast.Constant(template),
-                    attr="format",
-                    ctx=ast.Load()
-                ),
-                args=rendered,
+            # The template is filled at run time (not baked into a `.format`
+            # call), so `number_format="power"` can rewrite the source's numeric
+            # literals while leaving substituted values alone.
+            plain_args: list[ast.expr] = [
+                ast.Constant(key), ast.Constant(template), ast.Constant(template)
+            ]
+            plain_args += rendered
+            substituted = ast.Call(
+                func=q[h[Printer].substituted],
+                args=plain_args,
                 keywords=[]
             )
         else:
@@ -921,9 +1003,11 @@ def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET,
             one-line result: ``ro1 = (ro := (...)) = 2230 = 2230`` becomes
             ``ro1 = (ro := (...)) = 2230``. Has no effect in column mode.
             Default ``False``.
-        number_format: ``"exp"`` (default) keeps ``str``'s scientific notation
-            (``1.23e-09``); ``"power"`` shows plain real numbers as a power of
-            ten instead (``1.23*10**-9``).
+        number_format: ``"exp"`` (default) keeps ``str``'s numbers as they are;
+            ``"power"`` shows real numbers with a power of ten: scientific
+            notation becomes ``1.23*10**-9`` and a plain decimal far from ``1``
+            (below ``10**-4`` or at/above ``10**16``) is normalized, e.g.
+            ``0.0001106`` -> ``1.106*10**-4``. Applies to every phase.
 
     Returns:
         The scope key that changed: the file's absolute path, or ``"<ipython>"``
