@@ -101,6 +101,8 @@ value; ``precision=None`` restores the default.
 phase 2 (``ro1 := 2230``); phase 1 still shows the chain as written.
 ``reduce_equ_stages=True`` drops repeated adjacent stages from a one-line result
 (``ro1 = (ro := (...)) = 2230 = 2230`` becomes ``ro1 = (ro := (...)) = 2230``).
+``number_format="power"`` shows a plain real number that ``str`` would print as
+``1.23e-09`` as ``1.23*10**-9``.
 ``mpt.configure(...)`` returns the scope key it changed.
 
 **How the code is laid out.** The work is a short pipeline of single-purpose
@@ -124,6 +126,7 @@ import ast
 import decimal
 import importlib.util
 import os
+import re
 import sys
 import types
 from fractions import Fraction
@@ -147,6 +150,13 @@ class Numbers:
     """
 
     @staticmethod
+    def is_real_number(value):
+        """Whether `value` is a plain real number (``bool`` excluded)."""
+        return not isinstance(value, bool) and isinstance(
+            value, (int, float, decimal.Decimal, Fraction)
+        )
+
+    @staticmethod
     def format(value, digits):
         """`value` with `digits` significant digits, or `None` if not a number."""
         if isinstance(value, bool):
@@ -160,6 +170,21 @@ class Numbers:
                 return real
             return f"{real}{'-' if value.imag < 0 else '+'}{imag}j"
         return Numbers._real(value, digits)
+
+    #: Scientific notation as produced by ``str`` / ``format`` on a number.
+    _SCIENTIFIC = re.compile(r"(\d+(?:\.\d+)?)[eE]([+-]?\d+)")
+
+    @staticmethod
+    def to_power(text):
+        """Rewrite scientific notation as a power of ten.
+
+        ``"1.23e-09"`` -> ``"1.23*10**-9"``; the exponent loses a sign ``+``
+        and leading zeros. Text without scientific notation is returned as is.
+        """
+        def replace(match):
+            return f"{match.group(1)}*10**{int(match.group(2))}"
+
+        return Numbers._SCIENTIFIC.sub(replace, text)
 
     @staticmethod
     def _real(value, digits):
@@ -244,19 +269,20 @@ class Latex:
 
     @staticmethod
     def _patch_pytexit():
-        """Teach ``pytexit`` to render literals, dotted attributes and products.
+        """Teach ``pytexit`` to render literals, attributes, unary operators and products.
 
-        ``pytexit`` 0.4.0 has three gaps. Two make a line silently fall back to
+        ``pytexit`` 0.4.0 has four gaps. Three make a line silently fall back to
         plain text: it only defines ``visit_Num`` (Python >= 3.8 numeric
         literals parse to ``ast.Constant``, which lands on the buggy
-        ``generic_visit`` and raises), and it has no ``visit_Attribute`` at all,
-        so any dotted access (``me.H.atomic_number``) fails the same way. The
-        third changes the meaning: ``visit_Mult`` returns a space, and the
-        multiplication path only uses ``tex_multiplier`` when an operand looks
-        like a float literal, so ``2 * (0.07 * m)`` becomes ``2 0.07\\cdot m``.
-        All three are fixed here (a no-op on patched versions, except the
-        multiplier which is always made explicit). Only invoked in LaTeX mode,
-        so the default plain-text path never touches ``pytexit``.
+        ``generic_visit`` and raises); it has no ``visit_Attribute`` at all, so
+        any dotted access (``me.H.atomic_number``) fails the same way; and it has
+        no ``visit_UnaryOp``, so a negative number (``-2.5``, ``10**-9``) fails
+        too. The fourth changes the meaning: ``visit_Mult`` returns a space, and
+        the multiplication path only uses ``tex_multiplier`` when an operand
+        looks like a float literal, so ``2 * (0.07 * m)`` becomes
+        ``2 0.07\\cdot m``. All four are fixed here (a no-op on patched versions,
+        except the multiplier which is always made explicit). Only invoked in
+        LaTeX mode, so the default plain-text path never touches ``pytexit``.
         """
         try:
             from pytexit.core import core  # pyright: ignore[reportMissingModuleSource]
@@ -290,6 +316,20 @@ class Latex:
             # visitor on the third-party class) stays happy.
             setattr(visitor, "visit_Attribute", visit_Attribute)
 
+        if "visit_UnaryOp" not in visitor.__dict__:
+            def visit_UnaryOp(self, n):
+                # pytexit defines `visit_USub` / `visit_UAdd` but no
+                # `visit_UnaryOp`, so `-9` hits the broken `generic_visit`.
+                # Combine the operator with its operand instead. This is what
+                # makes negative numbers -- including a power-of-ten exponent
+                # such as `10**-9` -- render as LaTeX rather than plain text.
+                operand = self.visit(n.operand)
+                if isinstance(n.operand, ast.BinOp):
+                    operand = self.parenthesis(operand)
+                return "{}{}".format(self.visit(n.op), operand)
+
+            setattr(visitor, "visit_UnaryOp", visit_UnaryOp)
+
         # Always show multiplication explicitly. pytexit's `visit_Mult` returns
         # a space (implicit multiplication), and its `Mult` branch only switches
         # to `tex_multiplier` when one operand looks like a float *literal* --
@@ -320,12 +360,15 @@ class Printer:
     * whether phase 2 collapses a nested assignment chain
       (``mpt.configure(multiple_assignment_reduce=True)``), and
     * whether a one-line result drops repeated stages
-      (``mpt.configure(reduce_equ_stages=True)``).
+      (``mpt.configure(reduce_equ_stages=True)``), and
+    * the number format -- ``str``'s scientific notation (default) or a power
+      of ten (``mpt.configure(number_format="power")``).
 
     So the settings never leak between files. They live in :attr:`line_scopes`,
     :attr:`latex_scopes`, :attr:`precision_scopes`,
-    :attr:`multiple_assignment_reduce_scopes` and
-    :attr:`reduce_equ_stages_scopes`; the ``key_of*`` methods
+    :attr:`multiple_assignment_reduce_scopes`,
+    :attr:`reduce_equ_stages_scopes` and :attr:`power_number_scopes`; the
+    ``key_of*`` methods
     map a file or a live module to a scope key; and :meth:`render`, :meth:`text`,
     :meth:`emit` and :meth:`show` are the runtime hooks the expanded code calls
     (see :class:`Expander`).
@@ -350,6 +393,10 @@ class Printer:
     #: Scope keys whose one-line output drops repeated stages
     #: (see ``reduce_equ_stages=True``).
     reduce_equ_stages_scopes = set()
+
+    #: Scope keys that show scientific notation as a power of ten
+    #: (see ``number_format="power"``).
+    power_number_scopes = set()
 
     #: Values whose ``str`` repr is noise (``<function f at 0x…>``,
     #: ``<class 'int'>``, ``<module 'math' …>``). For these, phase 2 keeps the
@@ -438,6 +485,15 @@ class Printer:
         return key
 
     @classmethod
+    def set_number_format(cls, key, number_format="exp"):
+        """Set `key`'s number format: ``"exp"`` (default) or ``"power"``."""
+        if number_format == "power":
+            cls.power_number_scopes.add(key)
+        else:
+            cls.power_number_scopes.discard(key)
+        return key
+
+    @classmethod
     def line_on(cls, key):
         """Whether `key` (or every file, via ``ANY_FILE``) uses one-line layout."""
         return cls.ANY_FILE in cls.line_scopes or key in cls.line_scopes
@@ -468,6 +524,13 @@ class Printer:
             or key in cls.reduce_equ_stages_scopes
         )
 
+    @classmethod
+    def number_format_of(cls, key):
+        """`key`'s number format: ``"power"`` or ``"exp"`` (the default)."""
+        if cls.ANY_FILE in cls.power_number_scopes or key in cls.power_number_scopes:
+            return "power"
+        return "exp"
+
     # --- the runtime hooks (called by the expanded code) --------------------
 
     @classmethod
@@ -488,13 +551,27 @@ class Printer:
 
     @classmethod
     def text(cls, key, value):
-        """`value` as shown (``str``, with the scope's precision applied)."""
+        """`value` as shown (``str``, with the scope's precision applied).
+
+        With ``number_format="power"`` a plain real number that would be shown
+        in scientific notation is shown as a power of ten instead:
+        ``1.23*10**-9`` rather than ``1.23e-09``.
+        """
         digits = cls.precision_of(key)
         if digits is not None:
             shown = Numbers.format(value, digits)
             if shown is not None:
-                return shown
-        return str(value)
+                return cls._apply_number_format(key, value, shown)
+        return cls._apply_number_format(key, value, str(value))
+
+    @classmethod
+    def _apply_number_format(cls, key, value, shown):
+        """Rewrite `shown` for ``number_format="power"`` (real numbers only)."""
+        if cls.number_format_of(key) != "power":
+            return shown
+        if not Numbers.is_real_number(value):
+            return shown
+        return Numbers.to_power(shown)
 
     @classmethod
     def substituted(cls, key, normal, reduced, *values):
@@ -818,7 +895,8 @@ _UNSET = object()
 
 
 def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET,
-               multiple_assignment_reduce=_UNSET, reduce_equ_stages=_UNSET):
+               multiple_assignment_reduce=_UNSET, reduce_equ_stages=_UNSET,
+               number_format=_UNSET):
     """Change the display settings for the file (or notebook) this is called in.
 
     The settings apply to every ``mpt[...]`` in the calling scope -- the file,
@@ -843,6 +921,9 @@ def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET,
             one-line result: ``ro1 = (ro := (...)) = 2230 = 2230`` becomes
             ``ro1 = (ro := (...)) = 2230``. Has no effect in column mode.
             Default ``False``.
+        number_format: ``"exp"`` (default) keeps ``str``'s scientific notation
+            (``1.23e-09``); ``"power"`` shows plain real numbers as a power of
+            ten instead (``1.23*10**-9``).
 
     Returns:
         The scope key that changed: the file's absolute path, or ``"<ipython>"``
@@ -878,6 +959,12 @@ def _configure(*, out_order=_UNSET, out_format=_UNSET, precision=_UNSET,
                 "mpt.configure(reduce_equ_stages=...) expects True or False"
             )
         Printer.set_reduce_equ_stages(key, reduce_equ_stages)
+    if number_format is not _UNSET:
+        if number_format not in ("exp", "power"):
+            raise ValueError(
+                'mpt.configure(number_format=...) expects "exp" or "power"'
+            )
+        Printer.set_number_format(key, number_format)
     return key
 
 

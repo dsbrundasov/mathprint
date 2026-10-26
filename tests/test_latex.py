@@ -227,6 +227,43 @@ def test_pytexit_keeps_explicit_times_one():
     assert r"1{\cdot}x" in tex
 
 
+def test_pytexit_renders_negative_numbers():
+    # Regression: pytexit has no `visit_UnaryOp`, so `-2.5` used to hit its
+    # broken `generic_visit` and fall back to plain text in LaTeX mode.
+    pytest.importorskip("pytexit")
+    mathprint_main.Latex._patch_pytexit()
+    from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
+
+    tex = py2tex(
+        "-2.5 * x",
+        print_latex=False,
+        print_formula=False,
+        tex_multiplier=r"{\cdot}",
+        simplify_output=False,
+        simplify_multipliers=False,
+    )
+    assert "-2.5" in tex
+
+
+def test_pytexit_renders_a_power_of_ten():
+    # `number_format="power"` produces lines such as `1.23*10**-9`; the
+    # negative exponent must render (as `10^{-9}`) instead of falling back.
+    pytest.importorskip("pytexit")
+    mathprint_main.Latex._patch_pytexit()
+    from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
+
+    tex = py2tex(
+        mathprint_main.Latex._to_input("1.23*10**-9"),
+        print_latex=False,
+        print_formula=False,
+        tex_multiplier=r"{\cdot}",
+        simplify_output=False,
+        simplify_multipliers=False,
+    )
+    assert "1.23" in tex
+    assert "10}^{-9}" in tex
+
+
 def test_latex_mode_keeps_multiplication_end_to_end(monkeypatch):
     pytest.importorskip("pytexit")
     import IPython.display as ipython_display

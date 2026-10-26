@@ -33,6 +33,7 @@ class _Macro:
         precision: int | None = ...,
         multiple_assignment_reduce: bool = ...,
         reduce_equ_stages: bool = ...,
+        number_format: Literal["exp", "power"] = ...,
     ) -> str:
         """Change the display settings for the file (or notebook) this is called in.
 
@@ -60,6 +61,9 @@ class _Macro:
                 one-line result: ``ro1 = (ro := (...)) = 2230 = 2230`` becomes
                 ``ro1 = (ro := (...)) = 2230``. Has no effect in column mode.
                 Default ``False``.
+            number_format: ``"exp"`` (default) keeps ``str``'s scientific
+                notation (``1.23e-09``); ``"power"`` shows plain real numbers as
+                a power of ten instead (``1.23*10**-9``).
 
         Returns:
             The scope key that changed: the file's absolute path, or
@@ -80,7 +84,11 @@ mpt: _Macro
 # --- Numbers: display formatting of plain numbers -------------------------
 class Numbers:
     @staticmethod
+    def is_real_number(value: Any) -> bool: ...
+    @staticmethod
     def format(value: Any, digits: int) -> str | None: ...
+    @staticmethod
+    def to_power(text: str) -> str: ...
 
 # --- LaTeX: optional rendering of one line --------------------------------
 class Latex:
@@ -99,6 +107,7 @@ class Printer:
     precision_scopes: dict[str, int]
     multiple_assignment_reduce_scopes: set[str]
     reduce_equ_stages_scopes: set[str]
+    power_number_scopes: set[str]
     OPAQUE_TYPES: tuple[type, ...]
     @classmethod
     def key_of(cls, filename: Any) -> str: ...
@@ -115,6 +124,8 @@ class Printer:
     @classmethod
     def set_reduce_equ_stages(cls, key: str, on: bool = ...) -> str: ...
     @classmethod
+    def set_number_format(cls, key: str, number_format: Literal["exp", "power"] = ...) -> str: ...
+    @classmethod
     def line_on(cls, key: str) -> bool: ...
     @classmethod
     def latex_on(cls, key: str) -> bool: ...
@@ -125,9 +136,13 @@ class Printer:
     @classmethod
     def reduce_equ_stages_on(cls, key: str) -> bool: ...
     @classmethod
+    def number_format_of(cls, key: str) -> Literal["exp", "power"]: ...
+    @classmethod
     def render(cls, key: str, name: str, value: Any) -> str: ...
     @classmethod
     def text(cls, key: str, value: Any) -> str: ...
+    @classmethod
+    def _apply_number_format(cls, key: str, value: Any, shown: str) -> str: ...
     @classmethod
     def substituted(cls, key: str, normal: str, reduced: str, *values: str) -> str: ...
     @classmethod
@@ -160,4 +175,5 @@ def _configure(
     precision: int | None = ...,
     multiple_assignment_reduce: bool = ...,
     reduce_equ_stages: bool = ...,
+    number_format: Literal["exp", "power"] = ...,
 ) -> str: ...

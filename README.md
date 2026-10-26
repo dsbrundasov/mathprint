@@ -30,6 +30,7 @@ printed value and the macro's return value come from that single evaluation.
 - [Layout: one line or a column](#layout-one-line-or-a-column)
 - [LaTeX output](#latex-output)
 - [Display precision](#display-precision)
+- [Number format](#number-format)
 - [Nested assignments](#nested-assignments)
 - [Repeated stages](#repeated-stages)
 - [Disabling mathprint (no-op stub)](#disabling-mathprint-no-op-stub)
@@ -100,6 +101,9 @@ mpt[y > (a + z) * 2]
 - Optional **display precision**: `mpt.configure(precision=n)` shows numbers with
   `n` significant digits, per file, without affecting the computed value. See
   [Display precision](#display-precision).
+- Optional **number format**: `mpt.configure(number_format="power")` shows a number
+  that `str` would print as `1.23e-09` as `1.23*10**-9`, per file. Scientific
+  notation stays the default (`"exp"`). See [Number format](#number-format).
 - Optional **nested-assignment collapsing**:
   `mpt.configure(multiple_assignment_reduce=True)` shows a chain such as
   `ro1 := (ro := (ro_БФСС := 2230))` as `ro1 := 2230` in the substitution phase.
@@ -341,6 +345,7 @@ mpt.configure(out_order="line", out_format="latex", precision=4)
 | `precision` | `int` \| `None` | `None` (full) | significant digits shown; `None` resets |
 | `multiple_assignment_reduce` | `bool` | `False` | collapse a nested assignment chain in phase 2 |
 | `reduce_equ_stages` | `bool` | `False` | drop repeated adjacent stages from a one-line result |
+| `number_format` | `"exp"` \| `"power"` | `"exp"` | scientific notation, or a power of ten |
 
 Every argument is optional, and **an omitted argument is left unchanged** — so
 `mpt.configure(precision=2)` only touches the precision:
@@ -351,10 +356,11 @@ mpt.configure(out_format="latex")    # LaTeX; layout and precision as they were
 mpt.configure(precision=None)        # full precision again
 mpt.configure(multiple_assignment_reduce=True)  # collapse nested assignments
 mpt.configure(reduce_equ_stages=True)          # drop repeated one-line stages
+mpt.configure(number_format="power")           # 1.23*10**-9 instead of 1.23e-09
 ```
 
 Invalid values raise `ValueError`. The settings are per file (or per notebook in
-Jupyter), so they never leak between modules. The three sections below cover each
+Jupyter), so they never leak between modules. The sections below cover each
 option in detail.
 
 ---
@@ -478,6 +484,41 @@ as `23`, not `23.00`).
 
 The setting is scoped to the file (or notebook) where `mpt.configure(precision=n)`
 is called. `mpt.configure(precision=None)` restores the default.
+
+---
+
+## Number format
+
+By default numbers are shown with Python's own scientific notation, so a small
+value such as `1.23e-9` prints as `1.23e-09`. Set `number_format="power"` to show
+such a number as a power of ten instead:
+
+```python
+from mathprint import mpt
+mpt.configure(number_format="power")
+
+a = 1.23e-9
+mpt[a]
+# a
+# 1.23*10**-9
+# 1.23*10**-9
+```
+
+The exponent is normalized: no `+` sign and no leading zeros
+(`1e+20` → `1*10**20`, `1.5e-05` → `1.5*10**-5`). Numbers that do not use
+scientific notation are untouched (`2230`, `12345.678`, `0.001`), and so are
+values that are not plain real numbers — strings, complex numbers, symbolic
+objects. `bool` is excluded as well.
+
+This affects only the display: the expression is still evaluated and returned
+with its original value.
+
+`"exp"` is the default and changes nothing. The setting is scoped to the file (or
+notebook) where it is called; `mpt.configure(number_format="exp")` switches back.
+
+> If `precision=n` is also set, numbers are shown with plain decimal digits
+> (`0.00000000123`), so there is no exponent left to rewrite. `number_format`
+> only transforms text that would otherwise contain scientific notation.
 
 ---
 

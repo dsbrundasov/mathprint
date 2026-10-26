@@ -30,6 +30,7 @@ numbers with ``n`` significant digits::
 ``multiple_assignment_reduce=True`` collapses a nested assignment chain such as
 ``ro1 := (ro := (c := 2230))`` to ``ro1 := 2230`` in the substitution phase.
 ``reduce_equ_stages=True`` drops repeated adjacent stages from a one-line result.
+``number_format="power"`` shows ``1.23e-09`` as ``1.23*10**-9`` instead.
 
 Unload with::
 
