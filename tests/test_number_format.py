@@ -243,6 +243,93 @@ def test_power_renders_as_latex(monkeypatch):
     assert "10}^{-9}" in calls[-1].data
 
 
+# --- Parentheses where the power product would bind differently -------------
+
+def test_division_by_a_literal_keeps_the_power_in_the_denominator(capsys):
+    mpt.configure(number_format="power")
+    mpt[1 / 1.6e-19]
+    assert _lines(capsys) == [
+        "1 / (1.6*10**-19)",
+        "1 / (1.6*10**-19)",
+        "6.25*10**18",
+    ]
+
+
+def test_division_by_a_substituted_value_keeps_the_power_in_the_denominator(capsys):
+    mpt.configure(number_format="power")
+    m = 1.6e-19
+    mpt[x := 1 / m]
+    assert _lines(capsys) == [
+        "x := 1 / m",
+        "x := 1 / (1.6*10**-19)",
+        "x := 6.25*10**18",
+    ]
+
+
+def test_division_by_a_negative_literal(capsys):
+    mpt.configure(number_format="power")
+    mpt[1 / -1.6e-19]
+    assert _lines(capsys)[1] == "1 / -(1.6*10**-19)"
+
+
+def test_literal_as_a_power_base_is_parenthesized(capsys):
+    mpt.configure(number_format="power")
+    mpt[1.6e-19**2]
+    assert _lines(capsys)[1] == "(1.6*10**-19)**2"
+
+
+def test_literal_as_a_power_exponent_is_parenthesized(capsys):
+    mpt.configure(number_format="power")
+    mpt[2**1.6e-19]
+    assert _lines(capsys)[1] == "2**(1.6*10**-19)"
+
+
+def test_multiplication_needs_no_parentheses(capsys):
+    mpt.configure(number_format="power")
+    mpt[2 * 1.6e-19]
+    assert _lines(capsys) == [
+        "2 * 1.6*10**-19",
+        "2 * 1.6*10**-19",
+        "3.2*10**-19",
+    ]
+
+
+def test_numerator_needs_no_parentheses(capsys):
+    mpt.configure(number_format="power")
+    mpt[1.6e-19 / 2]
+    assert _lines(capsys)[1] == "1.6*10**-19 / 2"
+
+
+def test_rounded_value_is_not_parenthesized(capsys):
+    # Phase 3 shows one isolated number, not part of a larger expression.
+    mpt.configure(precision=4, number_format="power")
+    a = 1.23e-9
+    mpt[a]
+    assert _lines(capsys) == ["a", "1.23*10**-9", "1.23*10**-9"]
+
+
+def test_exp_format_adds_no_parentheses(capsys):
+    mpt.configure(number_format="exp")
+    mpt[1 / 1.6e-19]
+    assert _lines(capsys)[:2] == ["1 / 1.6e-19", "1 / 1.6e-19"]
+
+
+def test_latex_keeps_the_power_in_the_denominator(monkeypatch):
+    pytest.importorskip("pytexit")
+    import IPython.display as ipython_display
+
+    calls = []
+    monkeypatch.setattr(ipython_display, "display", lambda obj: calls.append(obj))
+
+    mpt.configure(out_format="latex", number_format="power")
+    mpt[1 / 1.6e-19]
+
+    rendered = [call.data for call in calls]
+    assert any("\\frac{1}{1.6{\\cdot}{10}^{-19}}" in tex for tex in rendered)
+    # Nothing leaks the power of ten out of the fraction.
+    assert not any("\\frac{1}{1.6}{\\cdot}{10}^{-19}" in tex for tex in rendered)
+
+
 # --- Turning it off again ---------------------------------------------------
 
 def test_can_be_restored_to_exp(capsys):

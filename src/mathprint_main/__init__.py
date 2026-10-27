@@ -188,6 +188,15 @@ class Numbers:
     SMALLEST_PLAIN_EXPONENT = -4
     #: A displayed decimal at or above this power of ten uses the ``*10**`` form.
     LARGEST_PLAIN_EXPONENT = 16
+    #: Tokens that carry no syntax, skipped when looking for neighbours.
+    _IGNORED_TOKENS = frozenset({
+        tokenize.NL, tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT,
+        tokenize.ENCODING, tokenize.ENDMARKER, tokenize.COMMENT,
+    })
+    #: A power-of-ten product as produced above: a mantissa and ``*10**n``.
+    _POWER_PRODUCT = re.compile(r"\*\s*10\s*\*\*\s*[+-]?\d+\Z")
+    #: A ``str.format`` placeholder, e.g. ``{}`` (or a numbered ``{0}``).
+    _PLACEHOLDER = re.compile(r"\{(\d*)\}")
 
     @staticmethod
     def to_power(text):
@@ -202,6 +211,12 @@ class Numbers:
         * a plain decimal that is far from ``1`` -- below ``10**-4`` or at or
           above ``10**16`` -- is normalized:
           ``"0.0001106"`` -> ``"1.106*10**-4"``.
+
+        The replacement is a product, so where that product would bind
+        differently from the literal it is parenthesized: ``x / 1.6e-19``
+        becomes ``x / (1.6*10**-19)`` (otherwise the trailing ``*10**-19``
+        would move out of the denominator) and ``1.6e-19**2`` becomes
+        ``(1.6*10**-19)**2``.
 
         Everything else is returned as written.
         """
@@ -219,20 +234,92 @@ class Numbers:
             row, column = position
             return starts[row - 1] + column
 
+        significant = [t for t in tokens if t.type not in Numbers._IGNORED_TOKENS]
         replacements = []
-        for token in tokens:
+        for index, token in enumerate(significant):
             if token.type != tokenize.NUMBER:
                 continue
             rewritten = Numbers._number_as_power(token.string)
-            if rewritten != token.string:
-                replacements.append(
-                    (offset(token.start), offset(token.end), rewritten)
-                )
+            if rewritten == token.string:
+                continue
+            if Numbers._needs_parentheses(significant, index):
+                rewritten = f"({rewritten})"
+            replacements.append(
+                (offset(token.start), offset(token.end), rewritten)
+            )
 
         # Splice from the end, so earlier offsets stay valid.
         for start, end, rewritten in reversed(replacements):
             text = text[:start] + rewritten + text[end:]
         return text
+
+    @staticmethod
+    def _needs_parentheses(tokens, index):
+        """Whether the rewritten number `tokens[index]` needs parentheses.
+
+        The power form is a product, so it must be grouped where the literal
+        was a single operand: as the denominator of a division (otherwise its
+        ``*10**n`` escapes and lands in the numerator) and as a base or an
+        exponent of ``**``.
+        """
+        following = tokens[index + 1] if index + 1 < len(tokens) else None
+        if following is not None and following.string == "**":
+            return True
+        previous = tokens[index - 1] if index > 0 else None
+        if previous is None:
+            return False
+        if previous.string in ("**", "/", "//", "%"):
+            return True
+        if previous.string in ("+", "-"):
+            # The sign belongs to the number; only the operator before it
+            # decides (``x / -1e-9`` vs ``a - 1e-9``).
+            before = tokens[index - 2] if index > 1 else None
+            return before is not None and before.string in ("**", "/", "//", "%")
+        return False
+
+    @staticmethod
+    def wrap_values(template, values):
+        """Fill `template` with `values`, parenthesizing fragile insertions.
+
+        ``str.format`` inserts a rendered value as raw text, so a value that is
+        itself a power product (``1.6*10**-19``) would leak its trailing
+        ``*10**`` out of a denominator exactly as a rewritten literal would.
+        Such a value is wrapped in parentheses when the placeholder directly
+        follows a division or a power.
+        """
+        values = list(values)
+        auto = 0
+        for match in Numbers._PLACEHOLDER.finditer(template):
+            if match.start() and template[match.start() - 1] == "{":
+                continue
+            if match.group(1):
+                index = int(match.group(1))
+            else:
+                index = auto
+                auto += 1
+            if index >= len(values):
+                continue
+            value = values[index]
+            if (
+                isinstance(value, str)
+                and Numbers._POWER_PRODUCT.search(value)
+                and Numbers._text_needs_parentheses(template[:match.start()])
+            ):
+                values[index] = f"({value})"
+        return template.format(*values)
+
+    @staticmethod
+    def _text_needs_parentheses(before):
+        """Whether a value inserted right after `before` needs parentheses."""
+        text = before.rstrip()
+        if not text:
+            return False
+        if text.endswith("**") or text[-1] in "/%":
+            return True
+        if text[-1] in "+-":
+            rest = text[:-1].rstrip()
+            return bool(rest) and (rest.endswith("**") or rest[-1] in "/%")
+        return False
 
     @staticmethod
     def _number_as_power(token):
@@ -697,6 +784,7 @@ class Printer:
         template = reduced if cls.multiple_assignment_reduce_on(key) else normal
         if cls.number_format_of(key) == "power":
             template = Numbers.to_power(template)
+            return Numbers.wrap_values(template, values)
         return template.format(*values)
 
     @classmethod

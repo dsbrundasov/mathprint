@@ -19,6 +19,8 @@
 !/.vscode/**
 !/docs/
 !/docs/**
+!/tools/
+!/tools/**
 
 # Build and cache artifacts (these override the allowlist rules above).
 __pycache__/

@@ -58,3 +58,13 @@ implementation, which is a short pipeline of single-purpose classes (`Numbers`,
 - The expression must be evaluated **exactly once**. The source is required:
   there is no fallback (a clear `MacroExpansionError` is raised when it is
   missing).
+
+## Session data
+
+Keep session data inside the project folder, so work can continue on another
+computer: OpenCode's own database is global and cannot be moved per project, so
+export the transcript with `.\tools\session-save.ps1` (writes
+`.opencode/sessions/<id>.json`); restore it elsewhere with
+`.\tools\session-load.ps1 <file>`. See `docs/sessions.md`. Export before
+handing the project over, and do not commit the JSON files unless the transfer
+goes through Git.

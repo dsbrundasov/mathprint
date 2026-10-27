@@ -529,6 +529,23 @@ excluded as well.
 This affects only the display: the expression is still evaluated and returned
 with its original value.
 
+The rewritten number is a product, so it is parenthesized wherever the literal
+was a single operand and the trailing `*10**n` would otherwise bind to
+something else. In particular, a divisor keeps its power of ten in the
+denominator:
+
+```python
+mpt[1 / 1.6e-19]
+# 1 / (1.6*10**-19)
+# ...
+# 6.25*10**18
+```
+
+The same applies to a substituted value (`m = 1.6e-19; mpt[1 / m]`) and to a
+literal used as the base or the exponent of `**` (`(1.6*10**-19)**2`,
+`2 ** (1.6*10**-19)`). Multiplication, addition and a numerator need no extra
+parentheses.
+
 `"exp"` is the default and changes nothing. The setting is scoped to the file (or
 notebook) where it is called; `mpt.configure(number_format="exp")` switches back.
 
