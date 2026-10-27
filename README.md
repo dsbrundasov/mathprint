@@ -365,11 +365,20 @@ mpt.configure(multiple_assignment_reduce=True)  # collapse nested assignments
 mpt.configure(reduce_equ_stages=True)          # drop repeated one-line stages
 mpt.configure(number_format="power")           # 1.23*10**-9 instead of 1.23e-09
 mpt.configure(additional_out="latex")          # raw LaTeX source after the output
+mpt.configure(reset=True)                      # back to the core: all defaults
 ```
 
-Invalid values raise `ValueError`. The settings are per file (or per notebook in
-Jupyter), so they never leak between modules. The sections below cover each
-option in detail.
+`reset=True` drops every option of the scope, returning it to the core output
+(source, substitution, `str(value)`), and may be combined with other arguments,
+which then apply on top:
+
+```python
+mpt.configure(reset=True, out_format="latex")  # core, but rendered as LaTeX
+```
+
+Invalid values raise `ValueError` **before** anything is stored, so a partly bad
+call changes nothing. The settings are per file (or per notebook in Jupyter), so
+they never leak between modules. The sections below cover each option in detail.
 
 ---
 
@@ -714,6 +723,26 @@ A complete example is in [examples/demo_stub.py](examples/demo_stub.py).
 > REPL) are not supported: there `mpt[...]` is not expanded at all, and a clear
 > macro-expansion error is raised rather than a subtly reformatted line.
 
+### How the code is organised
+
+The implementation is one module per job, in the order the phases run:
+
+| Module | Job |
+|---|---|
+| `expansion.py` | `MacroExpander` turns one `mpt[...]` into run-time calls |
+| `source.py` | `SourceText` (exact source) and `InPlaceSubstitution` (phase 2's template) |
+| `presentation.py` | `ExpressionReport`, the layout/output strategies, and `Presenter` (the run-time hooks) |
+| `settings.py` | `DisplaySettings` (the options) and `SettingsStore` (one entry per file) |
+| `numbers.py` | `SignificantDigits` (`precision`) and `PowerOfTen` (`number_format="power"`) |
+| `latex.py` | `LatexRenderer` — the only module that imports `pytexit`/`IPython` |
+
+The **core** is: substitute the names in place, evaluate the expression exactly
+once, print `str(value)`. Everything else — the one-line layout, LaTeX, precision,
+the power-of-ten format, the extra raw output — is a strategy that `Presenter`
+selects at run time from the scope's `DisplaySettings`, whose defaults are the
+core. So each feature is one branch, the core stays independent of all of them,
+and `mpt.configure(reset=True)` returns a file to the core.
+
 ---
 
 ## Order guarantee
@@ -820,9 +849,15 @@ src/
     stub.py                 # `from mathprint.stub import mpt` disables mathprint
     py.typed                # PEP 561 marker
   mathprint_jupyter.py      # Jupyter/IPython extension
-  mathprint_main/           # macro implementation
-    __init__.py
+  mathprint_main/           # macro implementation: one module per job
+    __init__.py             # public `mpt` + `configure` (wiring and docs)
     __init__.pyi            # type stubs (for Pylance)
+    expansion.py            # MacroExpander: one mpt[...] -> Presenter calls
+    source.py               # SourceText (exact source), InPlaceSubstitution (phase 2)
+    presentation.py         # ExpressionReport, layouts, outputs, Presenter
+    numbers.py              # SignificantDigits (precision), PowerOfTen (number_format)
+    latex.py                # LatexRenderer: the only pytexit/IPython importer
+    settings.py             # DisplaySettings (options), SettingsStore (per-scope)
     py.typed                # PEP 561 marker
 typings/
   mcpyrate/
@@ -830,12 +865,18 @@ typings/
   pytexit/
     __init__.pyi            # stubs for the optional pytexit dependency
 tests/
+  conftest.py               # registers mpt; resets display settings per test
   test_mathprint.py         # script tests
   test_jupyter.py           # Jupyter/IPython tests (skipped if IPython missing)
   test_stub.py              # no-op stub tests
   test_latex.py             # LaTeX output mode tests
   test_precision.py         # display precision tests
   test_layout.py            # one-line / column layout tests
+  test_configure.py         # the settings API
+  test_number_format.py     # number_format="power"
+  test_additional_out.py    # additional_out=...
+  test_multiple_assignment.py  # multiple_assignment_reduce=True
+  test_stage_dedup.py       # reduce_equ_stages=True
 examples/
   demo.py                   # script example (`from mathprint import mpt`)
   demo_stub.py              # script example (stub, prints nothing)

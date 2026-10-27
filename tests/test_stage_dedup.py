@@ -10,38 +10,8 @@ assignment collapse), the option drops the repeat::
 Column mode is unaffected: it always shows one stage per line.
 """
 
-import os
-
-import pytest
-
-import mathprint_main
 from mathprint import mpt
-
-_HERE = os.path.abspath(__file__)
-
-
-@pytest.fixture(autouse=True)
-def restore_settings():
-    """Keep layout/LaTeX/reduce state isolated per test."""
-    saved = (
-        set(mathprint_main.Printer.line_scopes),
-        set(mathprint_main.Printer.latex_scopes),
-        set(mathprint_main.Printer.multiple_assignment_reduce_scopes),
-        set(mathprint_main.Printer.reduce_equ_stages_scopes),
-    )
-    mathprint_main.Printer.line_scopes.clear()
-    mathprint_main.Printer.latex_scopes.clear()
-    mathprint_main.Printer.multiple_assignment_reduce_scopes.clear()
-    mathprint_main.Printer.reduce_equ_stages_scopes.clear()
-    yield
-    mathprint_main.Printer.line_scopes.clear()
-    mathprint_main.Printer.line_scopes.update(saved[0])
-    mathprint_main.Printer.latex_scopes.clear()
-    mathprint_main.Printer.latex_scopes.update(saved[1])
-    mathprint_main.Printer.multiple_assignment_reduce_scopes.clear()
-    mathprint_main.Printer.multiple_assignment_reduce_scopes.update(saved[2])
-    mathprint_main.Printer.reduce_equ_stages_scopes.clear()
-    mathprint_main.Printer.reduce_equ_stages_scopes.update(saved[3])
+from mathprint_main import LatexOutput
 
 
 # --- Default: the repeat is kept -------------------------------------------
@@ -114,7 +84,7 @@ def test_column_mode_keeps_three_lines(capsys):
 
 def test_enabled_works_in_latex_line_mode(monkeypatch):
     shown = []
-    monkeypatch.setattr(mathprint_main.Latex, "show", shown.append)
+    monkeypatch.setattr(LatexOutput, "show", shown.append)
     mpt.configure(
         out_order="line", out_format="latex", reduce_equ_stages=True
     )

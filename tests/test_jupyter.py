@@ -37,11 +37,10 @@ def shell():
 
 
 def _clear_scopes():
-    import mathprint_main
+    from mathprint_main import SettingsStore
 
-    mathprint_main.Printer.latex_scopes.discard("<ipython>")
-    mathprint_main.Printer.latex_scopes.discard(mathprint_main.Printer.ANY_FILE)
-    mathprint_main.Printer.precision_scopes.pop("<ipython>", None)
+    for key in ("<ipython>", SettingsStore.ANY_FILE):
+        SettingsStore.reset(key)
 
 
 def test_one_liner_in_cell(shell):
@@ -77,7 +76,7 @@ def test_comparison_order_in_cell(shell):
 
 def test_latex_mode_in_cell(shell):
     pytest.importorskip("pytexit")
-    import mathprint_main
+    from mathprint_main import SettingsStore
 
     result, out = _run(
         shell,
@@ -90,12 +89,12 @@ def test_latex_mode_in_cell(shell):
     assert result.success, result.error_in_exec
     # The file/notebook opted in, so plain text is no longer printed.
     assert "x := y+z" not in out
-    assert mathprint_main.Printer.latex_on("<ipython>")
+    assert SettingsStore.settings_for("<ipython>").out_format == "latex"
     assert shell.user_ns["x"] == 15
 
 
 def test_precision_mode_in_cell(shell):
-    import mathprint_main
+    from mathprint_main import SettingsStore
 
     result, out = _run(
         shell,
@@ -107,7 +106,7 @@ def test_precision_mode_in_cell(shell):
     assert result.success, result.error_in_exec
     assert "3.123 + 0" in out          # displayed with 4 significant digits
     assert "3.123123412 + 0" not in out
-    assert mathprint_main.Printer.precision_of("<ipython>") == 4
+    assert SettingsStore.settings_for("<ipython>").precision == 4
     assert shell.user_ns["v"] == 3.123123412
 
 

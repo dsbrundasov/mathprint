@@ -377,17 +377,14 @@ def test_sequence_trailing_comma(capsys):
 
 
 def test_sequence_with_precision(capsys):
-    import mathprint_main
+    from mathprint_main import SettingsStore
 
-    mathprint_main.Printer.precision_scopes[_HERE] = 4
-    try:
-        v = 3.123123412
-        result = mpt[v + 0, v * 1]
-        out = capsys.readouterr().out.splitlines()
-        assert out == ["v + 0", "3.123 + 0", "3.123", "v * 1", "3.123 * 1", "3.123"]
-        assert result == (3.123123412, 3.123123412)
-    finally:
-        mathprint_main.Printer.precision_scopes.pop(_HERE, None)
+    SettingsStore.update(_HERE, precision=4)
+    v = 3.123123412
+    result = mpt[v + 0, v * 1]
+    out = capsys.readouterr().out.splitlines()
+    assert out == ["v + 0", "3.123 + 0", "3.123", "v * 1", "3.123 * 1", "3.123"]
+    assert result == (3.123123412, 3.123123412)
 
 
 def test_tuple_value_is_a_single_expression(capsys):
@@ -409,10 +406,12 @@ def test_missing_source_raises_clear_error(monkeypatch):
     import mathprint_main
     from mcpyrate.core import MacroExpansionError
 
-    class _Expander:
+    class _NoFileExpander:
+        """Stands in for mcpyrate's expander: no filename, so no source text."""
+
         filename = None
 
     node = ast.parse("y + 0", mode="eval").body
-    monkeypatch.setattr(mathprint_main.Source, "override", None)
+    monkeypatch.setattr(mathprint_main.SourceText, "override", None)
     with pytest.raises(MacroExpansionError):
-        mathprint_main.mpt(node, expander=_Expander())  # pyright: ignore[reportCallIssue]
+        mathprint_main.mpt(node, expander=_NoFileExpander())  # pyright: ignore[reportCallIssue]

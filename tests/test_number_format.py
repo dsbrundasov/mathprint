@@ -12,47 +12,11 @@ plain real numbers (``int``, ``float``, ``Decimal``, ``Fraction``; not ``bool``)
 are rewritten; string contents and complex numbers are not.
 """
 
-import os
 from decimal import Decimal
 
 import pytest
 
-import mathprint_main
 from mathprint import mpt
-
-_HERE = os.path.abspath(__file__)
-
-
-@pytest.fixture(autouse=True)
-def restore_settings():
-    """Keep layout/format/precision/number-format state isolated per test."""
-    saved = (
-        set(mathprint_main.Printer.line_scopes),
-        set(mathprint_main.Printer.latex_scopes),
-        dict(mathprint_main.Printer.precision_scopes),
-        set(mathprint_main.Printer.multiple_assignment_reduce_scopes),
-        set(mathprint_main.Printer.reduce_equ_stages_scopes),
-        set(mathprint_main.Printer.power_number_scopes),
-    )
-    mathprint_main.Printer.line_scopes.clear()
-    mathprint_main.Printer.latex_scopes.clear()
-    mathprint_main.Printer.precision_scopes.clear()
-    mathprint_main.Printer.multiple_assignment_reduce_scopes.clear()
-    mathprint_main.Printer.reduce_equ_stages_scopes.clear()
-    mathprint_main.Printer.power_number_scopes.clear()
-    yield
-    mathprint_main.Printer.line_scopes.clear()
-    mathprint_main.Printer.line_scopes.update(saved[0])
-    mathprint_main.Printer.latex_scopes.clear()
-    mathprint_main.Printer.latex_scopes.update(saved[1])
-    mathprint_main.Printer.precision_scopes.clear()
-    mathprint_main.Printer.precision_scopes.update(saved[2])
-    mathprint_main.Printer.multiple_assignment_reduce_scopes.clear()
-    mathprint_main.Printer.multiple_assignment_reduce_scopes.update(saved[3])
-    mathprint_main.Printer.reduce_equ_stages_scopes.clear()
-    mathprint_main.Printer.reduce_equ_stages_scopes.update(saved[4])
-    mathprint_main.Printer.power_number_scopes.clear()
-    mathprint_main.Printer.power_number_scopes.update(saved[5])
 
 
 def _lines(capsys):

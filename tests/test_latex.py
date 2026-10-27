@@ -1,36 +1,26 @@
 """Tests for the optional LaTeX output mode (``mpt.configure(out_format="latex")``).
 
 The plain-text default must stay untouched, and LaTeX mode must route the three
-lines through ``mathprint_main.Latex.show`` instead of ``print``. The actual
-rendering needs ``pytexit`` + ``IPython``; those tests skip when ``pytexit`` is
-missing (the plain-text path never imports it).
+lines through ``mathprint_main.LatexOutput.show`` instead of ``print``. The
+actual rendering needs ``pytexit`` + ``IPython``; those tests skip when
+``pytexit`` is missing (the plain-text path never imports it).
 """
 
 import os
 
 import pytest
 
-import mathprint_main
 from mathprint import mpt
+from mathprint_main import LatexOutput, LatexRenderer, SettingsStore
 
 _HERE = os.path.abspath(__file__)
-
-
-@pytest.fixture(autouse=True)
-def restore_latex_files():
-    """Keep LaTeX-mode state isolated per test."""
-    saved = set(mathprint_main.Printer.latex_scopes)
-    mathprint_main.Printer.latex_scopes.clear()
-    yield
-    mathprint_main.Printer.latex_scopes.clear()
-    mathprint_main.Printer.latex_scopes.update(saved)
 
 
 @pytest.fixture
 def shown(monkeypatch):
     """Capture the lines that would be rendered as LaTeX."""
     collected = []
-    monkeypatch.setattr(mathprint_main.Latex, "show", collected.append)
+    monkeypatch.setattr(LatexOutput, "show", collected.append)
     return collected
 
 
@@ -43,7 +33,7 @@ def test_default_is_plain_text(capsys):
 
 
 def test_other_file_is_unaffected(capsys):
-    mathprint_main.Printer.latex_scopes.add(os.path.abspath("some_other_file.py"))
+    SettingsStore.update(os.path.abspath("some_other_file.py"), out_format="latex")
     result = mpt[2 + 3]
     assert capsys.readouterr().out.splitlines() == ["2 + 3", "2 + 3", "5"]
     assert result == 5
@@ -53,9 +43,9 @@ def test_other_file_is_unaffected(capsys):
 
 def test_latex_option_enable_disable():
     assert mpt.configure(out_format="latex") == _HERE
-    assert mathprint_main.Printer.latex_on(_HERE)
+    assert SettingsStore.settings_for(_HERE).out_format == "latex"
     assert mpt.configure(out_format="text") == _HERE
-    assert not mathprint_main.Printer.latex_on(_HERE)
+    assert SettingsStore.settings_for(_HERE).out_format == "text"
 
 
 # --- Enabled: routes to LaTeX ----------------------------------------------
@@ -81,29 +71,29 @@ def test_enabled_prints_nothing_to_stdout(capsys, shown):
 
 
 def test_any_file_key_enables_everything(shown):
-    mathprint_main.Printer.latex_scopes.add(mathprint_main.Printer.ANY_FILE)
+    SettingsStore.update(SettingsStore.ANY_FILE, out_format="latex")
     mpt[1 + 1]
     assert shown == ["1 + 1", "1 + 1", "2"]
 
 
 # --- Keys and helpers -------------------------------------------------------
 
-def test_latex_key_normalization():
-    assert mathprint_main.Printer.key_of(None) == "*"
-    assert mathprint_main.Printer.key_of("<ipython>") == "<ipython>"
-    assert mathprint_main.Printer.key_of("x.py") == os.path.abspath("x.py")
+def test_scope_key_normalization():
+    assert SettingsStore.key_for_filename(None) == "*"
+    assert SettingsStore.key_for_filename("<ipython>") == "<ipython>"
+    assert SettingsStore.key_for_filename("x.py") == os.path.abspath("x.py")
 
 
-def test_latex_enabled_membership():
-    assert not mathprint_main.Printer.latex_on(os.path.abspath("x.py"))
-    mathprint_main.Printer.latex_scopes.add(os.path.abspath("x.py"))
-    assert mathprint_main.Printer.latex_on(os.path.abspath("x.py"))
-    assert not mathprint_main.Printer.latex_on(os.path.abspath("y.py"))
+def test_format_is_scoped_to_its_file():
+    assert SettingsStore.settings_for(os.path.abspath("x.py")).out_format == "text"
+    SettingsStore.update(os.path.abspath("x.py"), out_format="latex")
+    assert SettingsStore.settings_for(os.path.abspath("x.py")).out_format == "latex"
+    assert SettingsStore.settings_for(os.path.abspath("y.py")).out_format == "text"
 
 
 def test_pytexit_input_rewrites_walrus():
-    assert mathprint_main.Latex._to_input("x := 5") == "x == 5"
-    assert mathprint_main.Latex._to_input("y + 2") == "y + 2"
+    assert LatexRenderer.to_pytex_input("x := 5") == "x == 5"
+    assert LatexRenderer.to_pytex_input("y + 2") == "y + 2"
 
 
 def test_latex_switch_scopes_to_calling_file(tmp_path):
@@ -118,7 +108,8 @@ def test_latex_switch_scopes_to_calling_file(tmp_path):
         "from mathprint import mpt\n"
         "key = mpt.configure(out_format='latex')\n"
         "assert key == os.path.abspath(__file__), (key, __file__)\n"
-        "assert mathprint_main.Printer.latex_on(os.path.abspath(__file__))\n"
+        "settings = mathprint_main.SettingsStore.settings_for(os.path.abspath(__file__))\n"
+        "assert settings.out_format == 'latex'\n"
         "print('ok')\n",
         encoding="utf-8",
     )
@@ -138,11 +129,11 @@ def test_latex_switch_scopes_to_calling_file(tmp_path):
 
 def test_pytexit_renders_numeric_lines():
     pytest.importorskip("pytexit")
-    mathprint_main.Latex._patch_pytexit()
+    LatexRenderer.patch_pytexit()
     from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
 
     tex = py2tex(
-        mathprint_main.Latex._to_input("x := 5 * 7 + 10"),
+        LatexRenderer.to_pytex_input("x := 5 * 7 + 10"),
         print_latex=False,
         print_formula=False,
         tex_multiplier=r"{\cdot}",
@@ -176,7 +167,7 @@ def test_pytexit_renders_dotted_attributes():
     # Regression: pytexit has no `visit_Attribute`, so a dotted line used to hit
     # its broken `generic_visit` and fall back to plain text in LaTeX mode.
     pytest.importorskip("pytexit")
-    mathprint_main.Latex._patch_pytexit()
+    LatexRenderer.patch_pytexit()
     from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
 
     tex = py2tex(
@@ -196,7 +187,7 @@ def test_pytexit_keeps_every_multiplication_sign():
     # switched to `tex_multiplier` only for float-literal operands, so
     # `2 * (0.07 * m)` rendered as `2 0.07\cdot m` -- a different formula.
     pytest.importorskip("pytexit")
-    mathprint_main.Latex._patch_pytexit()
+    LatexRenderer.patch_pytexit()
     from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
 
     tex = py2tex(
@@ -213,7 +204,7 @@ def test_pytexit_keeps_every_multiplication_sign():
 
 def test_pytexit_keeps_explicit_times_one():
     pytest.importorskip("pytexit")
-    mathprint_main.Latex._patch_pytexit()
+    LatexRenderer.patch_pytexit()
     from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
 
     tex = py2tex(
@@ -231,7 +222,7 @@ def test_pytexit_renders_negative_numbers():
     # Regression: pytexit has no `visit_UnaryOp`, so `-2.5` used to hit its
     # broken `generic_visit` and fall back to plain text in LaTeX mode.
     pytest.importorskip("pytexit")
-    mathprint_main.Latex._patch_pytexit()
+    LatexRenderer.patch_pytexit()
     from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
 
     tex = py2tex(
@@ -249,11 +240,11 @@ def test_pytexit_renders_a_power_of_ten():
     # `number_format="power"` produces lines such as `1.23*10**-9`; the
     # negative exponent must render (as `10^{-9}`) instead of falling back.
     pytest.importorskip("pytexit")
-    mathprint_main.Latex._patch_pytexit()
+    LatexRenderer.patch_pytexit()
     from pytexit import py2tex  # pyright: ignore[reportMissingModuleSource]
 
     tex = py2tex(
-        mathprint_main.Latex._to_input("1.23*10**-9"),
+        LatexRenderer.to_pytex_input("1.23*10**-9"),
         print_latex=False,
         print_formula=False,
         tex_multiplier=r"{\cdot}",
@@ -290,7 +281,7 @@ def test_display_latex_handles_dotted_attribute(capsys, monkeypatch):
     calls = []
     monkeypatch.setattr(ipython_display, "display", lambda obj: calls.append(obj))
 
-    mathprint_main.Latex.show("me.H.atomic_number")
+    LatexRenderer.display("me.H.atomic_number")
 
     assert len(calls) == 1         # rendered as LaTeX, not printed as plain text
     assert isinstance(calls[0], Latex)
@@ -305,7 +296,7 @@ def test_display_latex_shows_a_latex_object(monkeypatch):
     calls = []
     monkeypatch.setattr(ipython_display, "display", lambda obj: calls.append(obj))
 
-    mathprint_main.Latex.show("x := 5")
+    LatexRenderer.display("x := 5")
 
     assert len(calls) == 1
     assert isinstance(calls[0], Latex)
@@ -319,7 +310,9 @@ def test_display_latex_falls_back_to_plain_text(capsys, monkeypatch):
     monkeypatch.setattr(ipython_display, "display", lambda obj: calls.append(obj))
 
     # `and` is not convertible by py2tex; the line must be printed, not crash.
-    mathprint_main.Latex.show("x == (y and z)")
+    LatexRenderer.display("x == (y and z)")
 
     assert calls == []
     assert capsys.readouterr().out.strip() == "x == (y and z)"
+
+

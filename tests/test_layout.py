@@ -9,22 +9,10 @@ the name appearing once::
 
 import os
 
-import pytest
-
-import mathprint_main
 from mathprint import mpt
+from mathprint_main import LatexOutput, SettingsStore
 
 _HERE = os.path.abspath(__file__)
-
-
-@pytest.fixture(autouse=True)
-def restore_layout_files():
-    """Keep layout state isolated per test."""
-    saved = set(mathprint_main.Printer.line_scopes)
-    mathprint_main.Printer.line_scopes.clear()
-    yield
-    mathprint_main.Printer.line_scopes.clear()
-    mathprint_main.Printer.line_scopes.update(saved)
 
 
 # --- Default: a column ------------------------------------------------------
@@ -40,13 +28,13 @@ def test_default_is_a_column(capsys):
 
 def test_line_option_enable_disable():
     assert mpt.configure(out_order="line") == _HERE
-    assert mathprint_main.Printer.line_on(_HERE)
+    assert SettingsStore.settings_for(_HERE).out_order == "line"
     assert mpt.configure(out_order="column") == _HERE
-    assert not mathprint_main.Printer.line_on(_HERE)
+    assert SettingsStore.settings_for(_HERE).out_order == "column"
 
 
 def test_other_file_is_unaffected(capsys):
-    mathprint_main.Printer.line_scopes.add(os.path.abspath("some_other_file.py"))
+    SettingsStore.update(os.path.abspath("some_other_file.py"), out_order="line")
     result = mpt[2 + 3]
     assert capsys.readouterr().out.splitlines() == ["2 + 3", "2 + 3", "5"]
     assert result == 5
@@ -100,14 +88,10 @@ def test_line_sequence(capsys):
 
 
 def test_line_with_precision(capsys):
-    mpt.configure(out_order="line")
-    mathprint_main.Printer.precision_scopes[_HERE] = 3
-    try:
-        result = mpt[q := 1 / 3]
-        assert capsys.readouterr().out.splitlines() == ["q = 1 / 3 = 1 / 3 = 0.333"]
-        assert result == 1 / 3
-    finally:
-        mathprint_main.Printer.precision_scopes.pop(_HERE, None)
+    mpt.configure(out_order="line", precision=3)
+    result = mpt[q := 1 / 3]
+    assert capsys.readouterr().out.splitlines() == ["q = 1 / 3 = 1 / 3 = 0.333"]
+    assert result == 1 / 3
 
 
 def test_line_returns_value(capsys):
@@ -120,12 +104,8 @@ def test_line_returns_value(capsys):
 
 def test_line_latex_joins_with_equals(monkeypatch):
     shown = []
-    monkeypatch.setattr(mathprint_main.Latex, "show", shown.append)
+    monkeypatch.setattr(LatexOutput, "show", shown.append)
     y = 5
-    mpt.configure(out_order="line")
-    mpt.configure(out_format="latex")
-    try:
-        mpt[x := 3 + y]
-        assert shown == ["x == 3 + y == 3 + 5 == 8"]
-    finally:
-        mathprint_main.Printer.latex_scopes.discard(_HERE)
+    mpt.configure(out_order="line", out_format="latex")
+    mpt[x := 3 + y]
+    assert shown == ["x == 3 + y == 3 + 5 == 8"]

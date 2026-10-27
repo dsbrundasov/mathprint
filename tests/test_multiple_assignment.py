@@ -7,34 +7,7 @@ default phase 2 repeats the whole chain; with the option enabled it collapses to
 written.
 """
 
-import os
-
-import pytest
-
-import mathprint_main
 from mathprint import mpt
-
-_HERE = os.path.abspath(__file__)
-
-
-@pytest.fixture(autouse=True)
-def restore_settings():
-    """Keep layout/LaTeX/reduce state isolated per test."""
-    saved = (
-        set(mathprint_main.Printer.line_scopes),
-        set(mathprint_main.Printer.latex_scopes),
-        set(mathprint_main.Printer.multiple_assignment_reduce_scopes),
-    )
-    mathprint_main.Printer.line_scopes.clear()
-    mathprint_main.Printer.latex_scopes.clear()
-    mathprint_main.Printer.multiple_assignment_reduce_scopes.clear()
-    yield
-    mathprint_main.Printer.line_scopes.clear()
-    mathprint_main.Printer.line_scopes.update(saved[0])
-    mathprint_main.Printer.latex_scopes.clear()
-    mathprint_main.Printer.latex_scopes.update(saved[1])
-    mathprint_main.Printer.multiple_assignment_reduce_scopes.clear()
-    mathprint_main.Printer.multiple_assignment_reduce_scopes.update(saved[2])
 
 
 # --- Default: the chain is repeated ----------------------------------------

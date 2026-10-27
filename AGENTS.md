@@ -46,8 +46,23 @@ replaced by its current value (in place, order preserved), and the value.
 Display settings (layout, plain text vs LaTeX, display precision) are opt-in,
 grouped in `mpt.configure(...)`, and scoped per file. See `README.md`
 for the user-facing description and `src/mathprint_main/__init__.py` for the
-implementation, which is a short pipeline of single-purpose classes (`Numbers`,
-`Latex`, `Printer`, `Source`, `Expander`).
+implementation.
+
+The implementation is a rigid pipeline, one module per job:
+
+| module | contents |
+| --- | --- |
+| `settings.py` | `DisplaySettings` (the options; defaults = the core) and `SettingsStore` (scope → settings) |
+| `source.py` | `SourceText` (exact source text) and `InPlaceSubstitution` (phase-2 template + occurrences) |
+| `numbers.py` | `SignificantDigits` (`precision`) and `PowerOfTen` (`number_format="power"`) |
+| `latex.py` | `LatexRenderer` — the only place that imports `pytexit`/`IPython` |
+| `presentation.py` | `ExpressionReport`, `ColumnLayout`/`SingleLineLayout`, `PlainTextOutput`/`LatexOutput`, `Presenter` (runtime hooks) |
+| `expansion.py` | `MacroExpander` — turns one `mpt[...]` into `Presenter` calls |
+
+The core is "substitute, evaluate once, `str(value)`": everything else is a
+strategy chosen at run time from `DisplaySettings`, so it can be switched off
+(field by field, or all at once with `mpt.configure(reset=True)`).
+`src/mathprint_main/__init__.pyi` is the public, typed API.
 
 ## Conventions
 

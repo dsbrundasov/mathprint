@@ -9,9 +9,20 @@ no-op stub tests run in subprocesses, so this global binding never reaches them.
 """
 
 import mcpyrate  # noqa: F401
+import pytest
 
 from mcpyrate.core import global_bindings
 
 import mathprint_main
+from mathprint_main import SettingsStore
 
 global_bindings["mpt"] = mathprint_main.mpt  # pyright: ignore[reportArgumentType]
+
+
+@pytest.fixture(autouse=True)
+def restore_display_settings():
+    """Give every test a clean settings registry, and restore it afterwards."""
+    saved = SettingsStore.snapshot()
+    SettingsStore.scopes.clear()
+    yield
+    SettingsStore.restore(saved)
