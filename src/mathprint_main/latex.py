@@ -9,13 +9,14 @@ the macro's lines here is :class:`mathprint_main.presentation.LatexOutput`.
 """
 
 import ast
+from typing import Any
 
 
 class LatexRenderer:
     """Convert printed lines with ``pytexit``, and optionally display them."""
 
     @staticmethod
-    def display(text):
+    def display(text: str) -> None:
         """Show `text` as rendered LaTeX, or print it if it cannot be converted.
 
         Some operators (e.g. ``and``) are not convertible; then the line is
@@ -25,12 +26,15 @@ class LatexRenderer:
         if tex is None:
             print(text)
             return
-        from IPython.display import Latex as _IpythonLatex, display
+        # IPython's `display` is untyped (`include`/`metadata`/... are
+        # `Unknown`), so the imported callable is left as `Any`.
+        from IPython.display import Latex as _IpythonLatex
+        from IPython.display import display  # pyright: ignore[reportUnknownVariableType]
 
         display(_IpythonLatex(tex))
 
     @staticmethod
-    def to_source(text):
+    def to_source(text: str) -> str | None:
         """Return `text` as LaTeX source (``$$...$$``), or ``None`` on failure.
 
         This does not display anything, so it also backs the raw
@@ -56,7 +60,7 @@ class LatexRenderer:
             return None
 
     @staticmethod
-    def to_pytex_input(text):
+    def to_pytex_input(text: str) -> str:
         """Turn a printed line into a Python expression ``py2tex`` can parse.
 
         The assignment prefix uses ``:=``; ``py2tex`` expects a comparison, so
@@ -65,7 +69,7 @@ class LatexRenderer:
         return text.replace(":=", "==")
 
     @staticmethod
-    def patch_pytexit():
+    def patch_pytexit() -> None:
         """Teach ``pytexit`` to render literals, attributes, unary operators and products.
 
         ``pytexit`` 0.4.0 has four gaps.  Three make a line silently fall back
@@ -90,7 +94,7 @@ class LatexRenderer:
             return
 
         if "visit_Constant" not in visitor.__dict__:
-            def visit_Constant(self, n):
+            def visit_Constant(self: Any, n: ast.Constant) -> str:
                 value = n.value
                 if isinstance(value, bool):
                     return str(value)
@@ -103,7 +107,7 @@ class LatexRenderer:
             visitor.visit_Constant = visit_Constant
 
         if "visit_Attribute" not in visitor.__dict__:
-            def visit_Attribute(self, n):
+            def visit_Attribute(self: Any, n: ast.Attribute) -> str:
                 # No visitor for dotted access: render `me.H.atomic_number` as
                 # `me.H.atomic_{number}`, each part through the normal name
                 # formatting (`_` becomes a subscript, Greek names are mapped).
@@ -115,7 +119,7 @@ class LatexRenderer:
             setattr(visitor, "visit_Attribute", visit_Attribute)
 
         if "visit_UnaryOp" not in visitor.__dict__:
-            def visit_UnaryOp(self, n):
+            def visit_UnaryOp(self: Any, n: ast.UnaryOp) -> str:
                 # pytexit defines `visit_USub` / `visit_UAdd` but no
                 # `visit_UnaryOp`, so `-9` hits the broken `generic_visit`.
                 # Combine the operator with its operand instead.  This is what
@@ -133,7 +137,7 @@ class LatexRenderer:
         # to `tex_multiplier` when one operand looks like a float *literal* --
         # so `2 * (0.07 * m)` renders as `2 0.07\cdot m`, silently changing the
         # formula.  Return the configured multiplier for every `Mult` instead.
-        def visit_Mult(self, n):
+        def visit_Mult(self: Any, n: ast.Mult) -> str:
             return self.tex_multiplier
 
         setattr(visitor, "visit_Mult", visit_Mult)

@@ -13,14 +13,20 @@ import decimal
 import io
 import re
 import tokenize
+from collections.abc import Iterable, Sequence
 from fractions import Fraction
+from typing import Any
 
 
-def is_real_number(value):
+def is_real_number(value: Any) -> bool:
     """Whether `value` is a plain real number (``bool`` excluded)."""
     return not isinstance(value, bool) and isinstance(
         value, (int, float, decimal.Decimal, Fraction)
     )
+
+
+#: A plain real number, as accepted by :class:`SignificantDigits`.
+_RealNumber = int | float | decimal.Decimal | Fraction
 
 
 class SignificantDigits:
@@ -32,7 +38,7 @@ class SignificantDigits:
     """
 
     @staticmethod
-    def format(value, digits):
+    def format(value: Any, digits: int) -> str | None:
         """`value` with `digits` significant digits, or ``None`` if not a number."""
         if isinstance(value, bool):
             return None
@@ -47,7 +53,7 @@ class SignificantDigits:
         return SignificantDigits._real(value, digits)
 
     @staticmethod
-    def _real(value, digits):
+    def _real(value: _RealNumber, digits: int) -> str:
         """Format a real number with `digits` significant digits."""
         with decimal.localcontext() as ctx:
             ctx.prec = max(28, digits + 10)
@@ -66,7 +72,7 @@ class SignificantDigits:
         return text
 
     @staticmethod
-    def _to_decimal(value):
+    def _to_decimal(value: _RealNumber) -> decimal.Decimal:
         """Lossless-ish conversion of a plain number to `decimal.Decimal`."""
         if isinstance(value, decimal.Decimal):
             return value
@@ -93,33 +99,33 @@ class PowerOfTen:
     """
 
     #: A plain decimal number, as ``tokenize`` reports a ``NUMBER`` token.
-    _PLAIN_NUMBER = re.compile(r"(?:\d+(?:\.\d+)?|\.\d+)\Z")
+    _PLAIN_NUMBER: re.Pattern[str] = re.compile(r"(?:\d+(?:\.\d+)?|\.\d+)\Z")
 
     #: Scientific notation, as ``tokenize`` reports a ``NUMBER`` token.
-    _SCIENTIFIC_NUMBER = re.compile(
+    _SCIENTIFIC_NUMBER: re.Pattern[str] = re.compile(
         r"(?P<mantissa>\d+(?:\.\d+)?|\.\d+)[eE](?P<exponent>[+-]?\d+)\Z"
     )
 
     #: A displayed decimal below this power of ten uses the ``*10**`` form.
-    SMALLEST_PLAIN_EXPONENT = -4
+    SMALLEST_PLAIN_EXPONENT: int = -4
 
     #: A displayed decimal at or above this power of ten uses the ``*10**`` form.
-    LARGEST_PLAIN_EXPONENT = 16
+    LARGEST_PLAIN_EXPONENT: int = 16
 
     #: Tokens that carry no syntax, skipped when looking for neighbours.
-    _IGNORED_TOKENS = frozenset({
+    _IGNORED_TOKENS: frozenset[int] = frozenset({
         tokenize.NL, tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT,
         tokenize.ENCODING, tokenize.ENDMARKER, tokenize.COMMENT,
     })
 
     #: A power-of-ten product produced here: a mantissa and ``*10**n``.
-    _POWER_PRODUCT = re.compile(r"\*\s*10\s*\*\*\s*[+-]?\d+\Z")
+    _POWER_PRODUCT: re.Pattern[str] = re.compile(r"\*\s*10\s*\*\*\s*[+-]?\d+\Z")
 
     #: A ``str.format`` placeholder, e.g. ``{}`` (or a numbered ``{0}``).
-    _PLACEHOLDER = re.compile(r"\{(\d*)\}")
+    _PLACEHOLDER: re.Pattern[str] = re.compile(r"\{(\d*)\}")
 
     @classmethod
-    def rewrite(cls, text):
+    def rewrite(cls, text: str) -> str:
         """Rewrite the numbers in `text` as powers of ten.
 
         The replacement is a product, so where it would bind differently from
@@ -133,16 +139,18 @@ class PowerOfTen:
         except (tokenize.TokenError, IndentationError, SyntaxError):
             return text
 
-        starts = [0]
+        starts: list[int] = [0]
         for line in text.splitlines(keepends=True):
             starts.append(starts[-1] + len(line))
 
-        def offset(position):
+        def offset(position: tuple[int, int]) -> int:
             row, column = position
             return starts[row - 1] + column
 
-        significant = [t for t in tokens if t.type not in cls._IGNORED_TOKENS]
-        replacements = []
+        significant: list[tokenize.TokenInfo] = [
+            t for t in tokens if t.type not in cls._IGNORED_TOKENS
+        ]
+        replacements: list[tuple[int, int, str]] = []
         for index, token in enumerate(significant):
             if token.type != tokenize.NUMBER:
                 continue
@@ -161,7 +169,7 @@ class PowerOfTen:
         return text
 
     @classmethod
-    def fill_template(cls, template, values):
+    def fill_template(cls, template: str, values: Iterable[Any]) -> str:
         """Fill a ``str.format`` `template` with power-formatted `values`.
 
         The template's own numeric literals are rewritten first.  Then each
@@ -170,7 +178,7 @@ class PowerOfTen:
         same reason a rewritten literal does.
         """
         template = cls.rewrite(template)
-        values = list(values)
+        items = list(values)
         auto_index = 0
         for match in cls._PLACEHOLDER.finditer(template):
             if match.start() and template[match.start() - 1] == "{":
@@ -180,19 +188,20 @@ class PowerOfTen:
             else:
                 index = auto_index
                 auto_index += 1
-            if index >= len(values):
+            if index >= len(items):
                 continue
-            value = values[index]
+            value = items[index]
             if (
                 isinstance(value, str)
                 and cls._POWER_PRODUCT.search(value)
                 and cls._text_needs_parentheses(template[:match.start()])
             ):
-                values[index] = f"({value})"
-        return template.format(*values)
+                items[index] = f"({value})"
+        return template.format(*items)
 
     @classmethod
-    def _needs_parentheses(cls, tokens, index):
+    def _needs_parentheses(cls, tokens: Sequence[tokenize.TokenInfo],
+                           index: int) -> bool:
         """Whether the rewritten number `tokens[index]` needs parentheses.
 
         The power form is a product, so it must be grouped where the literal
@@ -216,7 +225,7 @@ class PowerOfTen:
         return False
 
     @staticmethod
-    def _text_needs_parentheses(before):
+    def _text_needs_parentheses(before: str) -> bool:
         """Whether a value inserted right after `before` needs parentheses."""
         text = before.rstrip()
         if not text:
@@ -229,7 +238,7 @@ class PowerOfTen:
         return False
 
     @classmethod
-    def _number_as_power(cls, token):
+    def _number_as_power(cls, token: str) -> str:
         """Rewrite one ``NUMBER`` token, or return it unchanged."""
         scientific = cls._SCIENTIFIC_NUMBER.match(token)
         if scientific:

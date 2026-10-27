@@ -21,12 +21,13 @@ independent of every optional feature.
 """
 
 import ast
+from typing import Any
 
 from mcpyrate.quotes import macros, q, a, u, h
 
 from .presentation import Presenter
 from .settings import SettingsStore
-from .source import InPlaceSubstitution, SourceText
+from .source import InPlaceSubstitution, Occurrence, SourceText
 
 
 class MacroExpander:
@@ -38,20 +39,20 @@ class MacroExpander:
     source; everything else happens in the expanded code.
     """
 
-    def __init__(self, expander):
+    def __init__(self, expander: Any) -> None:
         filename = getattr(expander, "filename", None)
         self.scope_key = SettingsStore.key_for_filename(filename)
         self.source_text = self._source_text_for(filename)
 
     @staticmethod
-    def _source_text_for(filename):
+    def _source_text_for(filename: str | None) -> SourceText:
         """The text of `filename`, or the notebook override when there is no file."""
         file_text = SourceText.read(filename) if filename else None
         if file_text is None:
             file_text = SourceText.override
         return SourceText(file_text)
 
-    def expand(self, expr):
+    def expand(self, expr: ast.expr) -> ast.expr:
         """Expand the subscript body: one expression, or a tuple of them."""
         if type(expr) is ast.Tuple:
             items = [self._expand_one(element) for element in expr.elts]
@@ -61,7 +62,7 @@ class MacroExpander:
             return ast.fix_missing_locations(call)
         return self._expand_one(expr)
 
-    def _expand_one(self, expr):
+    def _expand_one(self, expr: ast.expr) -> ast.expr:
         """Expand one item into its ``Presenter.show(...)`` call."""
         name = self._assignment_name(expr)
         substitution = InPlaceSubstitution(self.source_text, expr)
@@ -76,13 +77,14 @@ class MacroExpander:
         )]
 
     @staticmethod
-    def _assignment_name(expr):
+    def _assignment_name(expr: ast.expr) -> str:
         """``"x"`` for ``x := expression``, else ``""``."""
         if type(expr) is ast.NamedExpr and type(expr.target) is ast.Name:
             return expr.target.id
         return ""
 
-    def _substituted_text_call(self, expr, name, substitution):
+    def _substituted_text_call(self, expr: ast.expr, name: str,
+                               substitution: InPlaceSubstitution) -> ast.Call:
         """AST for ``Presenter.substituted_text(key, normal, reduced, ...)``.
 
         `normal` is the phase-2 template of the whole expression.  `reduced`
@@ -112,7 +114,7 @@ class MacroExpander:
             func=q[h[Presenter].substituted_text], args=args, keywords=[]
         )
 
-    def _occurrence_argument(self, node):
+    def _occurrence_argument(self, node: Occurrence) -> ast.expr:
         """AST for one rendered name occurrence, hygienically bound."""
         if isinstance(node, ast.Attribute):
             name = ast.unparse(node)
@@ -121,7 +123,7 @@ class MacroExpander:
         return q[h[Presenter].name_text(u[self.scope_key], u[name], a[node])]
 
     @staticmethod
-    def _innermost_assignment_value(expr):
+    def _innermost_assignment_value(expr: ast.expr) -> ast.expr | None:
         """`expr` with its nested assignment wrappers removed, or ``None``.
 
         Only a *direct* chain is handled -- an assignment whose right-hand side
@@ -140,7 +142,7 @@ class MacroExpander:
         return node
 
     @staticmethod
-    def collect(*values):
+    def collect(*values: Any) -> tuple[Any, ...]:
         """Gather a sequenced ``mpt[a, b, ...]`` into a tuple.
 
         Each item is evaluated (and shown) left to right, in the *caller's*

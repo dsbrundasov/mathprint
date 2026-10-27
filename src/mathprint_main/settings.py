@@ -14,8 +14,9 @@ options exist or where they are stored.
 """
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Literal
+from typing import Any, ClassVar, Literal
 
 
 @dataclass(frozen=True)
@@ -58,15 +59,15 @@ class SettingsStore:
     """
 
     #: Scope key meaning "every file" (used when no filename is known).
-    ANY_FILE = "*"
+    ANY_FILE: ClassVar[str] = "*"
 
     #: Scope key -> settings, for scopes that changed at least one option.
-    scopes: dict[str, DisplaySettings] = {}
+    scopes: ClassVar[dict[str, DisplaySettings]] = {}
 
     # --- scope keys ---------------------------------------------------------
 
     @classmethod
-    def key_for_filename(cls, filename):
+    def key_for_filename(cls, filename: str | None) -> str:
         """Map a source `filename` to a scope key."""
         if not filename:
             return cls.ANY_FILE
@@ -75,12 +76,12 @@ class SettingsStore:
         return os.path.abspath(filename)
 
     @classmethod
-    def key_for_globals(cls, globals_):
+    def key_for_globals(cls, globals_: Mapping[str, Any]) -> str:
         """Scope key for a live module/cell's globals (backs ``mpt.configure``)."""
         if not globals_:
             return cls.ANY_FILE
         path = globals_.get("__file__")
-        if path:
+        if isinstance(path, str):
             return cls.key_for_filename(path)
         if "get_ipython" in globals_:
             return "<ipython>"
@@ -89,7 +90,7 @@ class SettingsStore:
     # --- reading and writing settings ---------------------------------------
 
     @classmethod
-    def settings_for(cls, key) -> DisplaySettings:
+    def settings_for(cls, key: str) -> DisplaySettings:
         """`key`'s settings, or the :attr:`ANY_FILE` fallback, or the defaults."""
         settings = cls.scopes.get(key)
         if settings is not None:
@@ -97,14 +98,14 @@ class SettingsStore:
         return cls.scopes.get(cls.ANY_FILE, DisplaySettings())
 
     @classmethod
-    def update(cls, key, **changes) -> DisplaySettings:
+    def update(cls, key: str, **changes: Any) -> DisplaySettings:
         """Return `key`'s settings with `changes` applied, and store them."""
         settings = replace(cls.settings_for(key), **changes)
         cls.scopes[key] = settings
         return settings
 
     @classmethod
-    def reset(cls, key) -> DisplaySettings:
+    def reset(cls, key: str) -> DisplaySettings:
         """Drop `key`'s own entry, so it uses the :attr:`ANY_FILE` fallback."""
         cls.scopes.pop(key, None)
         return cls.settings_for(key)

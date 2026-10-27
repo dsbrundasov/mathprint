@@ -17,6 +17,7 @@ exactly "print the source, print the substitution, print ``str(value)``".
 
 from dataclasses import dataclass
 import types
+from typing import Any, Literal
 
 from .latex import LatexRenderer
 from .numbers import PowerOfTen, SignificantDigits, is_real_number
@@ -68,7 +69,8 @@ class ReportLayout:
 class ColumnLayout(ReportLayout):
     """One line per phase, each carrying the ``name := `` prefix."""
 
-    def lines(self, report, *, for_latex=False, drop_repeated=False):
+    def lines(self, report: ExpressionReport, *, for_latex: bool = False,
+              drop_repeated: bool = False) -> list[str]:
         # Column mode ignores both flags: one stage per line, never repeated.
         value_line = (
             f"{report.name} := {report.value_text}"
@@ -84,7 +86,8 @@ class SingleLineLayout(ReportLayout):
     is ``name = 3 + y = 3 + 5 = 8``.
     """
 
-    def lines(self, report, *, for_latex=False, drop_repeated=False):
+    def lines(self, report: ExpressionReport, *, for_latex: bool = False,
+              drop_repeated: bool = False) -> list[str]:
         source = report.source_text
         substituted = report.substituted_text
         if report.name:
@@ -99,13 +102,13 @@ class SingleLineLayout(ReportLayout):
         return [joiner.join(parts)]
 
 
-def drop_adjacent_repeats(parts):
+def drop_adjacent_repeats(parts: list[str]) -> list[str]:
     """Keep the first part of every run of equal adjacent parts.
 
     ``ro1 = (ro := (...)) = 2230 = 2230`` becomes
     ``ro1 = (ro := (...)) = 2230``.
     """
-    kept = []
+    kept: list[str] = []
     for part in parts:
         if not kept or kept[-1] != part:
             kept.append(part)
@@ -116,27 +119,27 @@ class LineOutput:
     """Show one finished line (plain text, or rendered LaTeX)."""
 
     @staticmethod
-    def for_format(out_format) -> "LineOutput":
+    def for_format(out_format: Literal["text", "latex"]) -> "LineOutput":
         """The output chosen by ``out_format`` (``"text"`` or ``"latex"``)."""
         if out_format == "latex":
             return LatexOutput()
         return PlainTextOutput()
 
-    def show(self, text):
+    def show(self, text: str) -> None:
         raise NotImplementedError
 
 
 class PlainTextOutput(LineOutput):
     """Print one line with ``print``."""
 
-    def show(self, text):
+    def show(self, text: str) -> None:
         print(text)
 
 
 class LatexOutput(LineOutput):
     """Show one line as rendered LaTeX, via :class:`LatexRenderer`."""
 
-    def show(self, text):
+    def show(self, text: str) -> None:
         LatexRenderer.display(text)
 
 
@@ -152,7 +155,7 @@ class Presenter:
     #: Values whose ``str`` repr is noise (``<function f at 0x…>``,
     #: ``<class 'int'>``, ``<module 'math' …>``).  For these, phase 2 keeps the
     #: *name* used in the source instead of substituting the value's repr.
-    OPAQUE_TYPES = (
+    OPAQUE_TYPES: tuple[type, ...] = (
         types.ModuleType,           # modules
         types.FunctionType,         # def / lambda
         types.BuiltinFunctionType,  # len, math.floor (builtin_function_or_method)
@@ -163,7 +166,7 @@ class Presenter:
     # --- rendering values ---------------------------------------------------
 
     @classmethod
-    def value_text(cls, key, value):
+    def value_text(cls, key: str, value: Any) -> str:
         """`value` as text, with the scope's precision and number format applied."""
         settings = SettingsStore.settings_for(key)
         text = str(value)
@@ -176,7 +179,7 @@ class Presenter:
         return text
 
     @classmethod
-    def name_text(cls, key, name, value):
+    def name_text(cls, key: str, name: str, value: Any) -> str:
         """What replaces one name occurrence in phase 2.
 
         Modules, functions, methods, built-ins, classes and other callables are
@@ -191,7 +194,8 @@ class Presenter:
     # --- phase 2 ------------------------------------------------------------
 
     @classmethod
-    def substituted_text(cls, key, normal, reduced, *values):
+    def substituted_text(cls, key: str, normal: str, reduced: str,
+                         *values: str) -> str:
         """Fill the phase-2 template with the rendered occurrences.
 
         `normal` is the full substitution; `reduced` is a nested assignment
@@ -211,7 +215,8 @@ class Presenter:
     # --- phases 1-3 ---------------------------------------------------------
 
     @classmethod
-    def show(cls, key, name, source, substituted, value):
+    def show(cls, key: str, name: str, source: str, substituted: str,
+             value: Any) -> Any:
         """Show the whole call and return `value`.
 
         Column mode shows the three phases on separate lines; one-line mode
@@ -255,7 +260,7 @@ class Presenter:
         return value
 
     @staticmethod
-    def show_raw(text, out_format):
+    def show_raw(text: str, out_format: Literal["latex", "text"]) -> None:
         """Print one line raw: LaTeX source, or the plain Python line.
 
         Raw output is never rendered: ``"latex"`` prints the ``py2tex`` result

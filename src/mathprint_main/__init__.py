@@ -139,8 +139,9 @@ one-line wrapper over :class:`SettingsStore`.  The expanded code only calls
 and nothing at expansion time.
 """
 
+import ast
 import sys
-from typing import Any
+from typing import Any, Literal, TypeVar
 
 from .expansion import MacroExpander
 from .latex import LatexRenderer
@@ -156,7 +157,7 @@ from .settings import DisplaySettings, SettingsStore
 from .source import InPlaceSubstitution, SourceText
 
 
-def mpt(expr, **kw):
+def mpt(expr: ast.expr, **kw: Any) -> ast.expr:
     """The ``mpt`` macro.
 
     A single ``mpt[expression]`` prints three lines and yields the value.  The
@@ -167,15 +168,27 @@ def mpt(expr, **kw):
     return MacroExpander(kw.get("expander")).expand(expr)
 
 
+class _Unset:
+    """The type of :data:`_UNSET`: "this ``configure`` argument was not given"."""
+
+
 #: Default for every ``configure`` argument: "this option was not given", so it
-#: must be left unchanged.  Typed `Any`, because a given value is validated at
-#: run time (the public types live in `__init__.pyi`).
-_UNSET: Any = object()
+#: must be left unchanged.  A given value is validated at run time (the public
+#: types live in `__init__.pyi`).
+_UNSET = _Unset()
 
 
-def configure(*, reset=False, out_order=_UNSET, out_format=_UNSET, precision=_UNSET,
-               multiple_assignment_reduce=_UNSET, reduce_equ_stages=_UNSET,
-               number_format=_UNSET, additional_out=_UNSET):
+def configure(
+    *,
+    reset: bool = False,
+    out_order: Literal["column", "line"] | _Unset = _UNSET,
+    out_format: Literal["text", "latex"] | _Unset = _UNSET,
+    precision: int | None | _Unset = _UNSET,
+    multiple_assignment_reduce: bool | _Unset = _UNSET,
+    reduce_equ_stages: bool | _Unset = _UNSET,
+    number_format: Literal["exp", "power"] | _Unset = _UNSET,
+    additional_out: Literal["latex", "text"] | None | _Unset = _UNSET,
+) -> str:
     """Change the display settings for the file (or notebook) this is called in.
 
     The settings apply to every ``mpt[...]`` in the calling scope -- the file,
@@ -227,31 +240,31 @@ def configure(*, reset=False, out_order=_UNSET, out_format=_UNSET, precision=_UN
         raise ValueError("mpt.configure(reset=...) expects True or False")
 
     changes: dict[str, Any] = {}
-    if out_order is not _UNSET:
+    if not isinstance(out_order, _Unset):
         changes["out_order"] = _require_choice(
             "out_order", out_order, ("column", "line")
         )
-    if out_format is not _UNSET:
+    if not isinstance(out_format, _Unset):
         changes["out_format"] = _require_choice(
             "out_format", out_format, ("text", "latex")
         )
-    if precision is not _UNSET:
+    if not isinstance(precision, _Unset):
         changes["precision"] = _require_positive_digits_or_none(
             "precision", precision
         )
-    if multiple_assignment_reduce is not _UNSET:
+    if not isinstance(multiple_assignment_reduce, _Unset):
         changes["multiple_assignment_reduce"] = _require_bool(
             "multiple_assignment_reduce", multiple_assignment_reduce
         )
-    if reduce_equ_stages is not _UNSET:
+    if not isinstance(reduce_equ_stages, _Unset):
         changes["reduce_equ_stages"] = _require_bool(
             "reduce_equ_stages", reduce_equ_stages
         )
-    if number_format is not _UNSET:
+    if not isinstance(number_format, _Unset):
         changes["number_format"] = _require_choice(
             "number_format", number_format, ("exp", "power")
         )
-    if additional_out is not _UNSET:
+    if not isinstance(additional_out, _Unset):
         changes["additional_out"] = _require_choice(
             "additional_out", additional_out, (None, "latex", "text")
         )
@@ -265,7 +278,10 @@ def configure(*, reset=False, out_order=_UNSET, out_format=_UNSET, precision=_UN
     return key
 
 
-def _require_choice(option_name, value, allowed):
+_T = TypeVar("_T")
+
+
+def _require_choice(option_name: str, value: Any, allowed: tuple[_T, ...]) -> _T:
     """`value` if it is one of `allowed`, else raise a ``ValueError``."""
     if value not in allowed:
         options = ", ".join(repr(option) for option in allowed)
@@ -275,14 +291,14 @@ def _require_choice(option_name, value, allowed):
     return value
 
 
-def _require_bool(option_name, value):
+def _require_bool(option_name: str, value: Any) -> bool:
     """`value` if it is a ``bool``, else raise a ``ValueError``."""
     if not isinstance(value, bool):
         raise ValueError(f"mpt.configure({option_name}=...) expects True or False")
     return value
 
 
-def _require_positive_digits_or_none(option_name, value):
+def _require_positive_digits_or_none(option_name: str, value: Any) -> int | None:
     """`value` as a positive ``int``, or ``None`` for full precision."""
     if value is None:
         return None
