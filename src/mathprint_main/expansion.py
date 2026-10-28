@@ -40,14 +40,14 @@ class MacroExpander:
     """
 
     def __init__(self, expander: Any) -> None:
-        filename = getattr(expander, "filename", None)
+        filename: str | None = getattr(expander, "filename", None)
         self.scope_key = SettingsStore.key_for_filename(filename)
         self.source_text = self._source_text_for(filename)
 
     @staticmethod
     def _source_text_for(filename: str | None) -> SourceText:
         """The text of `filename`, or the notebook override when there is no file."""
-        file_text = SourceText.read(filename) if filename else None
+        file_text: str | None = SourceText.read(filename) if filename else None
         if file_text is None:
             file_text = SourceText.override
         return SourceText(file_text)
@@ -55,8 +55,10 @@ class MacroExpander:
     def expand(self, expr: ast.expr) -> ast.expr:
         """Expand the subscript body: one expression, or a tuple of them."""
         if type(expr) is ast.Tuple:
-            items = [self._expand_one(element) for element in expr.elts]
-            call = ast.Call(
+            items: list[ast.expr] = [
+                self._expand_one(element) for element in expr.elts
+            ]
+            call: ast.Call = ast.Call(
                 func=q[h[MacroExpander].collect], args=items, keywords=[]
             )
             return ast.fix_missing_locations(call)
@@ -64,7 +66,7 @@ class MacroExpander:
 
     def _expand_one(self, expr: ast.expr) -> ast.expr:
         """Expand one item into its ``Presenter.show(...)`` call."""
-        name = self._assignment_name(expr)
+        name: str = self._assignment_name(expr)
         substitution = InPlaceSubstitution(self.source_text, expr)
         # The arguments are evaluated left to right, so phase 2 is rendered
         # from the *old* values before `expr` itself is evaluated.
@@ -94,14 +96,18 @@ class MacroExpander:
         from the settings at run time; the occurrences are shared, because they
         all live in the innermost value either way.
         """
-        occurrences = [
+        occurrences: list[ast.expr] = [
             self._occurrence_argument(node) for node in substitution.occurrences
         ]
-        normal = substitution.template
-        reduced = normal
-        inner = self._innermost_assignment_value(expr) if name else None
+        normal: str = substitution.template
+        reduced: str = normal
+        inner: ast.expr | None = (
+            self._innermost_assignment_value(expr) if name else None
+        )
         if inner is not None:
-            collapsed = InPlaceSubstitution(self.source_text, inner)
+            collapsed: InPlaceSubstitution = InPlaceSubstitution(
+                self.source_text, inner
+            )
             reduced = f"{name} := {collapsed.template}"
 
         args: list[ast.expr] = [
@@ -116,6 +122,7 @@ class MacroExpander:
 
     def _occurrence_argument(self, node: Occurrence) -> ast.expr:
         """AST for one rendered name occurrence, hygienically bound."""
+        name: str
         if isinstance(node, ast.Attribute):
             name = ast.unparse(node)
         else:
@@ -136,7 +143,7 @@ class MacroExpander:
         """
         if type(expr) is not ast.NamedExpr or type(expr.value) is not ast.NamedExpr:
             return None
-        node = expr.value
+        node: ast.expr = expr.value
         while type(node) is ast.NamedExpr:
             node = node.value
         return node

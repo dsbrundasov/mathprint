@@ -57,16 +57,18 @@ class SignificantDigits:
         """Format a real number with `digits` significant digits."""
         with decimal.localcontext() as ctx:
             ctx.prec = max(28, digits + 10)
-            number = SignificantDigits._to_decimal(value)
+            number: decimal.Decimal = SignificantDigits._to_decimal(value)
             if number == 0:
                 return "0"
-            exponent = number.adjusted()
+            exponent: int = number.adjusted()
             quantum = decimal.Decimal(1).scaleb(exponent - digits + 1)
             try:
-                rounded = number.quantize(quantum, rounding=decimal.ROUND_HALF_EVEN)
+                rounded: decimal.Decimal = number.quantize(
+                    quantum, rounding=decimal.ROUND_HALF_EVEN
+                )
             except decimal.InvalidOperation:
                 return str(value)
-            text = format(rounded, "f")
+            text: str = format(rounded, "f")
         if "." in text:
             text = text.rstrip("0").rstrip(".")
         return text
@@ -135,7 +137,9 @@ class PowerOfTen:
         ``(1.6*10**-19)**2``.
         """
         try:
-            tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
+            tokens: list[tokenize.TokenInfo] = list(
+                tokenize.generate_tokens(io.StringIO(text).readline)
+            )
         except (tokenize.TokenError, IndentationError, SyntaxError):
             return text
 
@@ -154,7 +158,7 @@ class PowerOfTen:
         for index, token in enumerate(significant):
             if token.type != tokenize.NUMBER:
                 continue
-            rewritten = cls._number_as_power(token.string)
+            rewritten: str = cls._number_as_power(token.string)
             if rewritten == token.string:
                 continue
             if cls._needs_parentheses(significant, index):
@@ -178,11 +182,12 @@ class PowerOfTen:
         same reason a rewritten literal does.
         """
         template = cls.rewrite(template)
-        items = list(values)
-        auto_index = 0
+        items: list[Any] = list(values)
+        auto_index: int = 0
         for match in cls._PLACEHOLDER.finditer(template):
             if match.start() and template[match.start() - 1] == "{":
                 continue  # an escaped literal brace, e.g. "{{}}"
+            index: int
             if match.group(1):
                 index = int(match.group(1))
             else:
@@ -190,7 +195,7 @@ class PowerOfTen:
                 auto_index += 1
             if index >= len(items):
                 continue
-            value = items[index]
+            value: Any = items[index]
             if (
                 isinstance(value, str)
                 and cls._POWER_PRODUCT.search(value)
@@ -209,10 +214,14 @@ class PowerOfTen:
         ``*10**n`` escapes and lands in the numerator) and as a base or an
         exponent of ``**``.
         """
-        following = tokens[index + 1] if index + 1 < len(tokens) else None
+        following: tokenize.TokenInfo | None = (
+            tokens[index + 1] if index + 1 < len(tokens) else None
+        )
         if following is not None and following.string == "**":
             return True
-        previous = tokens[index - 1] if index > 0 else None
+        previous: tokenize.TokenInfo | None = (
+            tokens[index - 1] if index > 0 else None
+        )
         if previous is None:
             return False
         if previous.string in ("**", "/", "//", "%"):
@@ -220,7 +229,9 @@ class PowerOfTen:
         if previous.string in ("+", "-"):
             # The sign belongs to the number; only the operator before it
             # decides (``x / -1e-9`` vs ``a - 1e-9``).
-            before = tokens[index - 2] if index > 1 else None
+            before: tokenize.TokenInfo | None = (
+                tokens[index - 2] if index > 1 else None
+            )
             return before is not None and before.string in ("**", "/", "//", "%")
         return False
 
@@ -240,14 +251,14 @@ class PowerOfTen:
     @classmethod
     def _number_as_power(cls, token: str) -> str:
         """Rewrite one ``NUMBER`` token, or return it unchanged."""
-        scientific = cls._SCIENTIFIC_NUMBER.match(token)
+        scientific: re.Match[str] | None = cls._SCIENTIFIC_NUMBER.match(token)
         if scientific:
-            mantissa = scientific.group("mantissa")
-            exponent = int(scientific.group("exponent"))
+            mantissa: str = scientific.group("mantissa")
+            exponent: int = int(scientific.group("exponent"))
             return f"{mantissa}*10**{exponent}"
         if not cls._PLAIN_NUMBER.match(token):
             return token
-        value = decimal.Decimal(token)
+        value: decimal.Decimal = decimal.Decimal(token)
         if value == 0:
             return token
         exponent = value.adjusted()
@@ -258,5 +269,5 @@ class PowerOfTen:
             return token
         with decimal.localcontext() as ctx:
             ctx.prec = max(28, len(value.as_tuple().digits) + 1)
-            mantissa = value.scaleb(-exponent).normalize()
-        return f"{format(mantissa, 'f')}*10**{exponent}"
+            normalized: decimal.Decimal = value.scaleb(-exponent).normalize()
+        return f"{format(normalized, 'f')}*10**{exponent}"

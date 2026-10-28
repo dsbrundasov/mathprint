@@ -62,7 +62,9 @@ The implementation is a rigid pipeline, one module per job:
 The core is "substitute, evaluate once, `str(value)`": everything else is a
 strategy chosen at run time from `DisplaySettings`, so it can be switched off
 (field by field, or all at once with `mpt.configure(reset=True)`).
-`src/mathprint_main/__init__.pyi` is the public, typed API.
+`src/mathprint_main/__init__.pyi` is the public, typed API. The two time phases
+(compile-time expansion vs run-time rendering) are drawn in
+`docs/macro-flow.md`.
 
 ## Conventions
 

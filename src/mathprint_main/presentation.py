@@ -15,6 +15,8 @@ The default report layout and output need no optional feature at all: they are
 exactly "print the source, print the substitution, print ``str(value)``".
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 import types
 from typing import Any, Literal
@@ -49,7 +51,7 @@ class ReportLayout:
     """Place the three phases of a report on one or more lines."""
 
     @staticmethod
-    def for_settings(settings: DisplaySettings) -> "ReportLayout":
+    def for_settings(settings: DisplaySettings) -> ReportLayout:
         """The layout chosen by `settings`."""
         if settings.out_order == "line":
             return SingleLineLayout()
@@ -72,7 +74,7 @@ class ColumnLayout(ReportLayout):
     def lines(self, report: ExpressionReport, *, for_latex: bool = False,
               drop_repeated: bool = False) -> list[str]:
         # Column mode ignores both flags: one stage per line, never repeated.
-        value_line = (
+        value_line: str = (
             f"{report.name} := {report.value_text}"
             if report.name else report.value_text
         )
@@ -88,17 +90,17 @@ class SingleLineLayout(ReportLayout):
 
     def lines(self, report: ExpressionReport, *, for_latex: bool = False,
               drop_repeated: bool = False) -> list[str]:
-        source = report.source_text
-        substituted = report.substituted_text
+        source: str = report.source_text
+        substituted: str = report.substituted_text
         if report.name:
             source = source.split(":=", 1)[1].strip()
             substituted = substituted.split(":=", 1)[1].strip()
-        parts = ([report.name] if report.name else []) + [
+        parts: list[str] = ([report.name] if report.name else []) + [
             source, substituted, report.value_text
         ]
         if drop_repeated:
             parts = drop_adjacent_repeats(parts)
-        joiner = " == " if for_latex else " = "
+        joiner: str = " == " if for_latex else " = "
         return [joiner.join(parts)]
 
 
@@ -119,7 +121,7 @@ class LineOutput:
     """Show one finished line (plain text, or rendered LaTeX)."""
 
     @staticmethod
-    def for_format(out_format: Literal["text", "latex"]) -> "LineOutput":
+    def for_format(out_format: Literal["text", "latex"]) -> LineOutput:
         """The output chosen by ``out_format`` (``"text"`` or ``"latex"``)."""
         if out_format == "latex":
             return LatexOutput()
@@ -168,10 +170,10 @@ class Presenter:
     @classmethod
     def value_text(cls, key: str, value: Any) -> str:
         """`value` as text, with the scope's precision and number format applied."""
-        settings = SettingsStore.settings_for(key)
-        text = str(value)
+        settings: DisplaySettings = SettingsStore.settings_for(key)
+        text: str = str(value)
         if settings.precision is not None:
-            rounded = SignificantDigits.format(value, settings.precision)
+            rounded: str | None = SignificantDigits.format(value, settings.precision)
             if rounded is not None:
                 text = rounded
         if settings.number_format == "power" and is_real_number(value):
@@ -206,8 +208,8 @@ class Presenter:
         inserted, so ``number_format="power"`` rewrites the source's numeric
         literals without touching a substituted string value.
         """
-        settings = SettingsStore.settings_for(key)
-        template = reduced if settings.multiple_assignment_reduce else normal
+        settings: DisplaySettings = SettingsStore.settings_for(key)
+        template: str = reduced if settings.multiple_assignment_reduce else normal
         if settings.number_format == "power":
             return PowerOfTen.fill_template(template, values)
         return template.format(*values)
@@ -227,20 +229,20 @@ class Presenter:
         main output, as raw text: LaTeX source (``"latex"``) or Python
         (``"text"``).
         """
-        settings = SettingsStore.settings_for(key)
+        settings: DisplaySettings = SettingsStore.settings_for(key)
         if settings.number_format == "power":
             # Phase 1 is the source, whose numeric literals are shown in the
             # same format (the phase-2 template does this in `substituted_text`).
             source = PowerOfTen.rewrite(source)
-        report = ExpressionReport(
+        report: ExpressionReport = ExpressionReport(
             name=name,
             source_text=source,
             substituted_text=substituted,
             value_text=cls.value_text(key, value),
         )
 
-        layout = ReportLayout.for_settings(settings)
-        main_output = LineOutput.for_format(settings.out_format)
+        layout: ReportLayout = ReportLayout.for_settings(settings)
+        main_output: LineOutput = LineOutput.for_format(settings.out_format)
         for line in layout.lines(
             report,
             for_latex=settings.out_format == "latex",
@@ -268,7 +270,7 @@ class Presenter:
         prints the Python line.
         """
         if out_format == "latex":
-            tex = LatexRenderer.to_source(text)
+            tex: str | None = LatexRenderer.to_source(text)
             print(text if tex is None else tex)
         else:
             print(text)

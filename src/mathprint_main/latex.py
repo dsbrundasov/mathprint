@@ -22,7 +22,7 @@ class LatexRenderer:
         Some operators (e.g. ``and``) are not convertible; then the line is
         printed, so one expression cannot break the run.
         """
-        tex = LatexRenderer.to_source(text)
+        tex: str | None = LatexRenderer.to_source(text)
         if tex is None:
             print(text)
             return
@@ -89,13 +89,13 @@ class LatexRenderer:
         try:
             from pytexit.core import core  # pyright: ignore[reportMissingModuleSource]
 
-            visitor = core.LatexVisitor
+            visitor: type[Any] = core.LatexVisitor
         except Exception:  # pragma: no cover - pytexit missing or restructured
             return
 
         if "visit_Constant" not in visitor.__dict__:
             def visit_Constant(self: Any, n: ast.Constant) -> str:
-                value = n.value
+                value: Any = n.value
                 if isinstance(value, bool):
                     return str(value)
                 if self.simplify_fractions and any(value == k for k in core.fracs):
@@ -111,7 +111,7 @@ class LatexRenderer:
                 # No visitor for dotted access: render `me.H.atomic_number` as
                 # `me.H.atomic_{number}`, each part through the normal name
                 # formatting (`_` becomes a subscript, Greek names are mapped).
-                attr = self.visit(ast.Name(id=n.attr, ctx=ast.Load()))
+                attr: str = self.visit(ast.Name(id=n.attr, ctx=ast.Load()))
                 return "{}.{}".format(self.visit(n.value), attr)
 
             # `setattr`, so the type checker (which does not see the patched
@@ -125,7 +125,7 @@ class LatexRenderer:
                 # Combine the operator with its operand instead.  This is what
                 # makes negative numbers -- including a power-of-ten exponent
                 # such as `10**-9` -- render as LaTeX rather than plain text.
-                operand = self.visit(n.operand)
+                operand: str = self.visit(n.operand)
                 if isinstance(n.operand, ast.BinOp):
                     operand = self.parenthesis(operand)
                 return "{}{}".format(self.visit(n.op), operand)

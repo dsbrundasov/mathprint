@@ -53,8 +53,8 @@ class SourceText:
 
     def text_of(self, node: ast.expr) -> str:
         """The exact source text of `node`, or raise."""
-        text = self._required_text()
-        segment = ast.get_source_segment(text, node)
+        text: str = self._required_text()
+        segment: str | None = ast.get_source_segment(text, node)
         if segment is None:
             raise MacroExpansionError("mpt could not find the expression in the source text")
         return segment
@@ -78,15 +78,15 @@ class SourceText:
         order.  A dotted chain rooted at a name (``me.H.atomic_number``) is one
         occurrence -- the whole chain -- so its value is substituted as a unit.
         """
-        start = self._offset(node.lineno, node.col_offset)
-        raw = segment.encode("utf-8")
-        spans = sorted(
+        start: int = self._offset(node.lineno, node.col_offset)
+        raw: bytes = segment.encode("utf-8")
+        spans: list[tuple[int, int, Occurrence]] = sorted(
             (*self._relative_span(n, start), n) for n in self._occurrences(node)
         )
 
         pieces: list[str] = []
         occurrences: list[Occurrence] = []
-        cursor = 0
+        cursor: int = 0
         for begin, end, name in spans:
             pieces.append(self._escape_braces(raw[cursor:begin].decode("utf-8")))
             pieces.append("{}")
@@ -105,14 +105,16 @@ class SourceText:
         a bare name (``f(x).attr``) are left alone, so the call is not evaluated
         an extra time.
         """
-        chains = [
+        chains: list[ast.Attribute] = [
             n for n in ast.walk(node)
             if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Load)
             and SourceText._attribute_root(n) is not None
         ]
-        inner = {id(n.value) for n in chains if isinstance(n.value, ast.Attribute)}
-        roots = {id(SourceText._attribute_root(n)) for n in chains}
-        names = [
+        inner: set[int] = {
+            id(n.value) for n in chains if isinstance(n.value, ast.Attribute)
+        }
+        roots: set[int] = {id(SourceText._attribute_root(n)) for n in chains}
+        names: list[ast.Name] = [
             n for n in ast.walk(node)
             if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
             and id(n) not in roots
@@ -130,15 +132,15 @@ class SourceText:
 
     def _offset(self, lineno: int, col_offset: int) -> int:
         """Absolute UTF-8 byte offset of `(lineno, col_offset)` in the source."""
-        text = self._required_text()
-        lines = text.replace("\f", "").splitlines(True)
-        base = sum(len(line.encode("utf-8")) for line in lines[:lineno - 1])
+        text: str = self._required_text()
+        lines: list[str] = text.replace("\f", "").splitlines(True)
+        base: int = sum(len(line.encode("utf-8")) for line in lines[:lineno - 1])
         return base + col_offset
 
     def _relative_span(self, node: Occurrence, origin: int) -> tuple[int, int]:
         """`node`'s byte span ``(start, end)``, relative to `origin`."""
-        end_lineno = node.end_lineno
-        end_col_offset = node.end_col_offset
+        end_lineno: int | None = node.end_lineno
+        end_col_offset: int | None = node.end_col_offset
         if end_lineno is None or end_col_offset is None:
             raise MacroExpansionError(
                 "mpt needs position information for the names in the expression"

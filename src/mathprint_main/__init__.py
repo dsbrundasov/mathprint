@@ -233,7 +233,7 @@ def configure(
     Raises:
         ValueError: If a value is not one of the allowed ones.
     """
-    key = SettingsStore.key_for_globals(sys._getframe(1).f_globals)
+    key: str = SettingsStore.key_for_globals(sys._getframe(1).f_globals)
 
     # Validate every given option first, so that a bad value changes nothing.
     if not isinstance(reset, bool):
@@ -284,7 +284,7 @@ _T = TypeVar("_T")
 def _require_choice(option_name: str, value: Any, allowed: tuple[_T, ...]) -> _T:
     """`value` if it is one of `allowed`, else raise a ``ValueError``."""
     if value not in allowed:
-        options = ", ".join(repr(option) for option in allowed)
+        options: str = ", ".join(repr(option) for option in allowed)
         raise ValueError(
             f"mpt.configure({option_name}=...) expects one of: {options}"
         )
@@ -302,7 +302,7 @@ def _require_positive_digits_or_none(option_name: str, value: Any) -> int | None
     """`value` as a positive ``int``, or ``None`` for full precision."""
     if value is None:
         return None
-    digits = int(value)
+    digits: int = int(value)
     if digits < 1:
         raise ValueError(
             f"mpt.configure({option_name}=...) needs a positive number of "
