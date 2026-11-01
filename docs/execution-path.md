@@ -217,9 +217,15 @@ Presenter.show(
    - модули, функции, методы, классы и прочие вызываемые объекты оставляют своё
      имя;
 2. если `expand_collections` равно `False` (по умолчанию `True`) и значение —
-   коллекция (`dict`, `list`, `tuple`, `set`, `frozenset`), имя тоже остаётся:
-   в подстановке будет `_p23["vgs"]`, а не `repr` всего словаря;
-3. иначе `Presenter.value_text(key, value)`:
+   коллекция (`dict`, `list`, `tuple`, `set`, `frozenset`), имя тоже остаётся
+   (это касается коллекции без индекса);
+3. для индексированного доступа (`_p23["vgs"]`) вызывается
+   `Presenter.subscript_text(...)`:
+   - при `expand_collections=False` подставляется **сам элемент**
+     (`_p23["vgs"]` → `1.85`);
+   - иначе — `repr` коллекции плюс индекс как в исходнике
+     (`{'model': ..., 'vgs': 1.85}["vgs"]`);
+4. иначе `Presenter.value_text(key, value)`:
    - `settings = SettingsStore.settings_for(key)`; `precision` здесь `None`;
    - `number_format` — `"exp"`, поэтому число не переписывается;
    - возвращает `str(value)`.

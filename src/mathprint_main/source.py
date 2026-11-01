@@ -4,21 +4,46 @@ Phase 1 is served by :class:`SourceText`: it holds the file (or notebook cell)
 text and returns the expression's own text byte-for-byte.  Phase 2 is served by
 :class:`InPlaceSubstitution`: the same text with every *loaded* name replaced by
 a positional ``str.format`` placeholder, plus the list of those name occurrences
-in source order.
+in source order.  A dotted chain and an indexed access rooted at a name are
+whole occurrences: a chain is substituted as a unit, and an access can be
+substituted by its item (see ``expand_collections``).
 
 Because the template is cut from the exact source and the placeholders are
 numbered by byte offset, the i-th placeholder is necessarily the i-th occurrence
 and receives the i-th value: substitution preserves the order of the names
-exactly.  Nothing is evaluated or simplified at this stage.
+exactly.  Nothing is evaluated or simplified at this stage (an item is read only
+when the caller asks for it).
 """
 
+from __future__ import annotations
+
 import ast
+from dataclasses import dataclass
 import importlib.util
 
 from mcpyrate.core import MacroExpansionError
 
-#: One substituted occurrence: a loaded name, or a whole dotted chain.
-Occurrence = ast.Name | ast.Attribute
+
+@dataclass(frozen=True)
+class SubscriptOccurrence:
+    """One indexed access such as ``_p23["vgs"]`` or ``d["a"]["b"]``.
+
+    The whole access is a single phase-2 occurrence.  ``base`` is the name or
+    dotted chain that is substituted when the collection is expanded, ``head``
+    and ``suffix`` are the literal text around it, and ``inner`` lists the
+    occurrences inside the index (``d[key]``).  ``suffix`` contains ``{}``
+    placeholders for ``inner``.
+    """
+
+    node: ast.Subscript
+    base: ast.Name | ast.Attribute
+    head: str
+    suffix: str
+    inner: tuple[Occurrence, ...] = ()
+
+
+#: One substituted occurrence: a loaded name, a dotted chain, or an indexed access.
+Occurrence = ast.Name | ast.Attribute | SubscriptOccurrence
 
 
 class SourceText:
@@ -77,34 +102,48 @@ class SourceText:
         ``{}`` placeholder; `occurrences` lists those occurrences in source
         order.  A dotted chain rooted at a name (``me.H.atomic_number``) is one
         occurrence -- the whole chain -- so its value is substituted as a unit.
+        An indexed access rooted at a name (``_p23["vgs"]``) is also one
+        occurrence, so phase 2 can substitute the *item* instead of the whole
+        collection when ``expand_collections`` is off.
         """
         start: int = self._offset(node.lineno, node.col_offset)
+        return self._template_for(segment, self._occurrences(node), start)
+
+    def _template_for(
+        self, segment: str, occurrences: list[Occurrence], origin: int
+    ) -> tuple[str, list[Occurrence]]:
+        """``(template, occurrences)`` for `segment`, whose start is `origin`."""
         raw: bytes = segment.encode("utf-8")
         spans: list[tuple[int, int, Occurrence]] = sorted(
-            (*self._relative_span(n, start), n) for n in self._occurrences(node)
+            (*self._relative_span(n, origin), n) for n in occurrences
         )
 
         pieces: list[str] = []
-        occurrences: list[Occurrence] = []
+        ordered: list[Occurrence] = []
         cursor: int = 0
-        for begin, end, name in spans:
+        for begin, end, occurrence in spans:
             pieces.append(self._escape_braces(raw[cursor:begin].decode("utf-8")))
             pieces.append("{}")
-            occurrences.append(name)
+            ordered.append(occurrence)
             cursor = end
         pieces.append(self._escape_braces(raw[cursor:].decode("utf-8")))
-        return "".join(pieces), occurrences
+        return "".join(pieces), ordered
 
     def _occurrences(self, node: ast.expr) -> list[Occurrence]:
-        """The occurrences to substitute: loaded names and dotted chains.
+        """The occurrences to substitute: loaded names, chains and indexes.
 
         A plain loaded ``Name`` is one occurrence.  A dotted chain rooted at a
         name is *one* occurrence -- the whole chain -- so both its prefixes
         (``me.H``) and its root ``Name`` (``me``) are left out: they are
-        contained in the chain and would overlap it.  Chains whose root is not
-        a bare name (``f(x).attr``) are left alone, so the call is not evaluated
-        an extra time.
+        contained in the chain and would overlap it.  An indexed access rooted
+        at a name or chain (``d["x"]``, ``self.rows[0]``, ``d["a"]["b"]``) is
+        likewise one occurrence, and everything inside it is described by that
+        occurrence instead of being substituted separately.
         """
+        subscripts: list[SubscriptOccurrence] = self._top_level_subscripts(node)
+        covered: set[int] = {
+            id(n) for occurrence in subscripts for n in ast.walk(occurrence.node)
+        }
         chains: list[ast.Attribute] = [
             n for n in ast.walk(node)
             if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Load)
@@ -117,11 +156,70 @@ class SourceText:
         names: list[ast.Name] = [
             n for n in ast.walk(node)
             if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
-            and id(n) not in roots
+            and id(n) not in roots and id(n) not in covered
         ]
         occurrences: list[Occurrence] = list(names)
-        occurrences.extend(n for n in chains if id(n) not in inner)
+        occurrences.extend(
+            n for n in chains if id(n) not in inner and id(n) not in covered
+        )
+        occurrences.extend(subscripts)
         return occurrences
+
+    def _top_level_subscripts(self, node: ast.expr) -> list[SubscriptOccurrence]:
+        """Indexed accesses that are not nested inside another one."""
+        candidates: list[ast.Subscript] = [
+            n for n in ast.walk(node)
+            if isinstance(n, ast.Subscript) and isinstance(n.ctx, ast.Load)
+            and self._subscript_base(n) is not None
+        ]
+        outermost: list[ast.Subscript] = [
+            candidate for candidate in candidates
+            if not any(
+                candidate is not other
+                and any(n is candidate for n in ast.walk(other))
+                for other in candidates
+            )
+        ]
+        return [self._subscript_occurrence(n) for n in outermost]
+
+    def _subscript_occurrence(self, node: ast.Subscript) -> SubscriptOccurrence:
+        """Describe one top-level indexed access."""
+        base: ast.Name | ast.Attribute | None = self._subscript_base(node)
+        if base is None:  # pragma: no cover - only called for candidates
+            raise MacroExpansionError("mpt could not find the base of an index")
+
+        start: int = self._offset(node.lineno, node.col_offset)
+        base_start: int = self._offset(base.lineno, base.col_offset)
+        base_end: int = self._offset(base.end_lineno or 0, base.end_col_offset or 0)
+        end: int = self._offset(node.end_lineno or 0, node.end_col_offset or 0)
+        raw: bytes = self._required_text().encode("utf-8")
+        head: str = raw[start:base_start].decode("utf-8")
+        suffix: str = raw[base_end:end].decode("utf-8")
+        inner: list[Occurrence] = self._occurrences(node.slice)
+        template, ordered = self._template_for(suffix, inner, base_end)
+        return SubscriptOccurrence(
+            node=node, base=base, head=head, suffix=template,
+            inner=tuple(ordered),
+        )
+
+    def _subscript_base(self, node: ast.Subscript) -> ast.Name | ast.Attribute | None:
+        """The name/chain being indexed, or ``None`` for other expressions.
+
+        Nested indexes collapse to their root: ``d["a"]["b"]`` is indexed on
+        ``d``.  A chain is accepted only when it starts at a bare name, so an
+        access such as ``f(x)[0]`` is left alone (the call is not evaluated an
+        extra time).
+        """
+        value: ast.expr = node.value
+        while isinstance(value, ast.Subscript):
+            value = value.value
+        if isinstance(value, ast.Name):
+            return value if isinstance(value.ctx, ast.Load) else None
+        if isinstance(value, ast.Attribute):
+            root: ast.Name | None = self._attribute_root(value)
+            if isinstance(value.ctx, ast.Load) and root is not None:
+                return value
+        return None
 
     @staticmethod
     def _attribute_root(node: ast.expr) -> ast.Name | None:
@@ -137,8 +235,13 @@ class SourceText:
         base: int = sum(len(line.encode("utf-8")) for line in lines[:lineno - 1])
         return base + col_offset
 
-    def _relative_span(self, node: Occurrence, origin: int) -> tuple[int, int]:
-        """`node`'s byte span ``(start, end)``, relative to `origin`."""
+    def _relative_span(self, occurrence: Occurrence, origin: int) -> tuple[int, int]:
+        """`occurrence`'s byte span ``(start, end)``, relative to `origin`."""
+        node: ast.expr = (
+            occurrence.node
+            if isinstance(occurrence, SubscriptOccurrence)
+            else occurrence
+        )
         end_lineno: int | None = node.end_lineno
         end_col_offset: int | None = node.end_col_offset
         if end_lineno is None or end_col_offset is None:
@@ -162,8 +265,8 @@ class InPlaceSubstitution:
     Attributes:
         source: phase 1 text, exactly as written.
         template: the same text with ``{}`` placeholders instead of names.
-        occurrences: the loaded-name AST nodes, in source order; the i-th one
-            fills the i-th placeholder.
+        occurrences: the loaded-name / chain / indexed-access AST nodes, in
+            source order; the i-th one fills the i-th placeholder.
     """
 
     def __init__(self, source_text: SourceText, node: ast.expr) -> None:

@@ -224,8 +224,10 @@ def configure(
             ``0.0001106`` -> ``1.106*10**-4``. Applies to every phase.
         expand_collections: ``True`` (default) substitutes the full ``repr`` of
             dicts, lists, tuples and sets in phase 2.  ``False`` keeps the
-            original name (e.g. ``_p23["vgs"]`` stays as written), which is
-            useful for LaTeX output and cleaner substitution lines.
+            collection out of the line and substitutes the indexed *item*
+            instead: ``_p23["vgs"]`` becomes ``1.85``.  A bare collection with
+            no index keeps its name.  Useful for LaTeX output and cleaner
+            substitution lines.
         additional_out: ``None`` (default) adds nothing. ``"latex"`` prints the
             same lines again, after the main output, as raw LaTeX source;
             ``"text"`` prints them as the plain Python line. The additional

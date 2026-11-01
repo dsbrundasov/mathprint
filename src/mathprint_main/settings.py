@@ -46,7 +46,8 @@ class DisplaySettings:
     number_format: Literal["exp", "power"] = "exp"
 
     #: Whether to expand collections (dict, list, tuple, set) in phase 2.
-    #: ``True`` (default): substitute the full repr.  ``False``: keep the name.
+    #: ``True`` (default): substitute the full repr.  ``False``: substitute the
+    #: indexed item (``d["x"]`` -> the value), or keep a bare collection's name.
     expand_collections: bool = True
 
     #: Repeat the lines as raw text after the main output (``"latex"`` or

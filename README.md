@@ -353,7 +353,7 @@ mpt.configure(out_order="line", out_format="latex", precision=4)
 | `reduce_equ_stages` | `bool` | `False` | drop repeated adjacent stages from a one-line result |
 | `number_format` | `"exp"` \| `"power"` | `"exp"` | Python's notation, or a power of ten |
 | `additional_out` | `"latex"` \| `"text"` \| `None` | `None` | print the lines again as raw LaTeX or plain text |
-| `expand_collections` | `bool` | `True` | expand dicts/lists/sets in phase 2; `False` keeps the name |
+| `expand_collections` | `bool` | `True` | expand dicts/lists/sets in phase 2; `False` substitutes the indexed item |
 
 Every argument is optional, and **an omitted argument is left unchanged** — so
 `mpt.configure(precision=2)` only touches the precision:
@@ -366,7 +366,7 @@ mpt.configure(multiple_assignment_reduce=True)  # collapse nested assignments
 mpt.configure(reduce_equ_stages=True)          # drop repeated one-line stages
 mpt.configure(number_format="power")           # 1.23*10**-9 instead of 1.23e-09
 mpt.configure(additional_out="latex")          # raw LaTeX source after the output
-mpt.configure(expand_collections=False)        # keep dict/list names in phase 2
+mpt.configure(expand_collections=False)        # show the item, not the whole collection
 mpt.configure(reset=True)                      # back to the core: all defaults
 ```
 
@@ -572,7 +572,8 @@ By default, when a variable holds a collection (`dict`, `list`, `tuple`, `set`,
 substitution line very long and breaks LaTeX rendering (the expanded dict
 contains colons and braces that `pytexit` cannot parse).
 
-Set `expand_collections=False` to keep the original name instead of expanding it:
+Set `expand_collections=False` to keep the collection out of the line and
+substitute the **item** the expression reads instead:
 
 ```python
 from mathprint import mpt
@@ -590,9 +591,14 @@ mpt[Vb2 := fi_d21_s23 - _p23['vgs']]
 mpt.configure(expand_collections=False)
 mpt[Vb2 := fi_d21_s23 - _p23['vgs']]
 # Vb2 := fi_d21_s23 - _p23['vgs']
-# Vb2 := 3.941 - _p23['vgs']
+# Vb2 := 3.941 - 1.85
 # Vb2 := 2.09...
 ```
+
+The same applies to lists, tuples and sets (`numbers[index]` shows the element,
+not the list), and to nested indexes (`d['a']['b']` shows the final item).
+A bare collection with no index keeps its name, because there is no single item
+to substitute.
 
 This is especially useful for **LaTeX output** — the shorter substitution line
 renders correctly, and the final value is still computed normally:
@@ -604,7 +610,7 @@ mpt.configure(out_format="latex", expand_collections=False)
 
 _p23 = {'vgs': 1.85}
 mpt[Vb2 := 3.941 - _p23['vgs']]
-# Renders cleanly as LaTeX without the dict expansion breaking pytexit
+# Renders cleanly as LaTeX: the substitution line is just 3.941 - 1.85
 ```
 
 The setting affects only the display in phase 2 (substitution). The actual
@@ -612,10 +618,10 @@ expression is still evaluated with the real value, and phase 3 (the computed
 value) shows the correct result. `expand_collections=True` (the default)
 restores the full expansion.
 
-`pytexit` has no subscript visitor, so `MathPrint` patches one in: a kept
-subscript renders as LaTeX brackets, e.g. `_p23["vgs"]` becomes
-`_{p23}\left[vgs\right]`. That is what keeps LaTeX mode on with
-`expand_collections=False`.
+When `expand_collections=True`, `pytexit` still gets a subscript after the
+expanded collection (`d["x"]`). `MathPrint` patches a `visit_Subscript` into
+`pytexit`, so that form renders as `\left[x\right]` instead of falling back to
+plain text.
 
 ---
 
@@ -936,7 +942,7 @@ tests/
   test_additional_out.py    # additional_out=...
   test_multiple_assignment.py  # multiple_assignment_reduce=True
   test_stage_dedup.py       # reduce_equ_stages=True
-  test_expand_collections.py  # expand_collections=True|False, LaTeX subscripts
+  test_expand_collections.py  # expand_collections=True|False (item substitution), LaTeX
 examples/
   demo.py                   # script example (`from mathprint import mpt`)
   demo_stub.py              # script example (stub, prints nothing)

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import types
+from collections.abc import Callable
 from typing import Any, Literal
 
 from .latex import LatexRenderer
@@ -191,7 +192,8 @@ class Presenter:
         *not* expanded: they keep the name used in the source (``math.sqrt``
         stays ``math.sqrt``, ``f`` stays ``f``, ``int`` stays ``int``).  If
         ``expand_collections`` is ``False`` (see :class:`DisplaySettings`),
-        dicts, lists, tuples and sets are also kept as their source name.
+        a *bare* collection also keeps its source name; an indexed access is
+        handled by :meth:`subscript_text`, which substitutes the item instead.
         Every other value is rendered by :meth:`value_text`.
         """
         if isinstance(value, cls.OPAQUE_TYPES) or callable(value):
@@ -200,6 +202,28 @@ class Presenter:
         if not settings.expand_collections and isinstance(value, cls.COLLECTION_TYPES):
             return name
         return cls.value_text(key, value)
+
+    @classmethod
+    def subscript_text(cls, key: str, head: str, base_name: str, suffix: str,
+                       base: Any, item: Callable[[], Any],
+                       *inner: str) -> str:
+        """What replaces one indexed access (``d["x"]``) in phase 2.
+
+        With ``expand_collections=True`` the collection itself is expanded, so
+        the result is the normal text of `base` followed by the index as
+        written (``{'x': 1}["x"]``).  With ``expand_collections=False`` the
+        *item* is substituted instead (``1``): the collection stays out of the
+        line, but the value the expression actually reads is shown.
+
+        `item` is a thunk, so the index is only evaluated when the setting asks
+        for the item; the default path behaves exactly as before.  `inner`
+        holds the already rendered occurrences inside the index (``d[k]``).
+        """
+        settings: DisplaySettings = SettingsStore.settings_for(key)
+        if not settings.expand_collections and isinstance(base, cls.COLLECTION_TYPES):
+            return cls.value_text(key, item())
+        base_text: str = cls.name_text(key, base_name, base)
+        return head + base_text + suffix.format(*inner)
 
     # --- phase 2 ------------------------------------------------------------
 

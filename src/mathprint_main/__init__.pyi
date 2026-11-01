@@ -8,7 +8,7 @@ advanced users get the same names and signatures at run time and in the editor.
 """
 
 import ast
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -80,8 +80,9 @@ class _Macro:
                 ``0.0001106`` -> ``1.106*10**-4``. Applies to every phase.
             expand_collections: ``True`` (default) substitutes the full ``repr`` of
                 dicts, lists, tuples and sets in phase 2.  ``False`` keeps the
-                original name (e.g. ``_p23["vgs"]`` stays as written), which is
-                useful for LaTeX output and cleaner substitution lines.
+                collection out of the line and substitutes the indexed *item*
+                instead: ``_p23["vgs"]`` becomes ``1.85``.  A bare collection
+                with no index keeps its name.
             additional_out: ``None`` (default) adds nothing. ``"latex"`` prints
                 the same lines again, after the main output, as raw LaTeX
                 source; ``"text"`` prints them as the plain Python line. The
@@ -233,6 +234,10 @@ class Presenter:
     def value_text(cls, key: str, value: Any) -> str: ...
     @classmethod
     def name_text(cls, key: str, name: str, value: Any) -> str: ...
+    @classmethod
+    def subscript_text(cls, key: str, head: str, base_name: str, suffix: str,
+                       base: Any, item: Callable[[], Any],
+                       *inner: str) -> str: ...
     @classmethod
     def substituted_text(cls, key: str, normal: str, reduced: str,
                          *values: str) -> str: ...

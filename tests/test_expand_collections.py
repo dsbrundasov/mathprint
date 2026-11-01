@@ -1,9 +1,10 @@
 """Tests for ``mpt.configure(expand_collections=...)``.
 
 By default a collection (dict, list, tuple, set) is substituted in phase 2 by
-its ``repr``.  With ``expand_collections=False`` the name is kept instead, so
-the substitution line stays short -- and a subscript such as ``_p23['vgs']``
-can still be rendered as LaTeX.
+its ``repr``.  With ``expand_collections=False`` the collection itself is kept
+out of the line and the indexed *item* is substituted instead, so
+``_p23['vgs']`` becomes the value of that key.  A bare collection with no index
+keeps its name.
 """
 
 import os
@@ -57,7 +58,7 @@ def test_dict_keeps_its_name_when_disabled(capsys):
     out = capsys.readouterr().out.splitlines()
     assert out == [
         'result := fi_d21_s23 - p23["vgs"]',
-        'result := 3.941 - p23["vgs"]',
+        "result := 3.941 - 1.85",
         "result := 2.0909999999999997",
     ]
     # Only the display changes; the expression is still evaluated normally.
@@ -66,21 +67,21 @@ def test_dict_keeps_its_name_when_disabled(capsys):
 
 # --- Phase 2: list, tuple, set ---------------------------------------------
 
-def test_list_keeps_its_name_when_disabled(capsys):
+def test_list_substitutes_the_item_when_disabled(capsys):
     numbers = [1, 2, 3, 4, 5]
     index = 2
     mpt.configure(expand_collections=False)
     assert mpt[item := numbers[index]] == 3
     out = capsys.readouterr().out.splitlines()
-    assert out == ["item := numbers[index]", "item := numbers[2]", "item := 3"]
+    assert out == ["item := numbers[index]", "item := 3", "item := 3"]
 
 
-def test_tuple_keeps_its_name_when_disabled(capsys):
+def test_tuple_substitutes_the_item_when_disabled(capsys):
     pair = (3, 4)
     mpt.configure(expand_collections=False)
     mpt[first := pair[0]]
     out = capsys.readouterr().out.splitlines()
-    assert out[1] == "first := pair[0]"
+    assert out[1] == "first := 3"
 
 
 def test_set_keeps_its_name_when_disabled(capsys):
@@ -100,6 +101,63 @@ def test_list_is_expanded_when_enabled(capsys):
     assert out[1] == "item := [1, 2, 3][1]"
 
 
+def test_variable_index_is_rendered_when_enabled(capsys):
+    data = {"a": 1, "b": 2}
+    key = "b"
+    mpt.configure(expand_collections=True)
+    mpt[picked := data[key]]
+    out = capsys.readouterr().out.splitlines()
+    assert out[1] == "picked := {'a': 1, 'b': 2}[b]"
+
+
+def test_nested_index_substitutes_the_final_item(capsys):
+    data = {"a": {"b": 7}}
+    mpt.configure(expand_collections=False)
+    mpt[nested := data["a"]["b"]]
+    out = capsys.readouterr().out.splitlines()
+    assert out[1] == "nested := 7"
+
+
+def test_bare_collection_keeps_its_name_when_disabled(capsys):
+    numbers = [1, 2, 3]
+    mpt.configure(expand_collections=False)
+    mpt[result := numbers]
+    out = capsys.readouterr().out.splitlines()
+    assert out[1] == "result := numbers"
+
+
+def test_enabled_does_not_index_during_phase_2(capsys):
+    class CountingDict(dict):
+        def __init__(self) -> None:
+            super().__init__({"x": 1})
+            self.reads = 0
+
+        def __getitem__(self, key):
+            self.reads += 1
+            return super().__getitem__(key)
+
+    data = CountingDict()
+    mpt.configure(expand_collections=True)
+    mpt[value := data["x"]]
+    assert data.reads == 1  # the expression itself, not phase 2
+
+
+def test_disabled_indexes_once_for_the_item(capsys):
+    class CountingDict(dict):
+        def __init__(self) -> None:
+            super().__init__({"x": 1})
+            self.reads = 0
+
+        def __getitem__(self, key):
+            self.reads += 1
+            return super().__getitem__(key)
+
+    data = CountingDict()
+    mpt.configure(expand_collections=False)
+    mpt[value := data["x"]]
+    assert data.reads == 2  # the substituted item, then the expression
+
+
 # --- LaTeX -----------------------------------------------------------------
 
 def test_subscript_renders_as_latex():
@@ -111,7 +169,7 @@ def test_subscript_renders_as_latex():
     assert r"\left[vgs\right]" in tex
 
 
-def test_unexpanded_collection_stays_latex_end_to_end(capsys, monkeypatch):
+def test_unexpanded_collection_latex_uses_the_item(capsys, monkeypatch):
     pytest.importorskip("pytexit")
     import IPython.display as ipython_display
 
@@ -122,8 +180,10 @@ def test_unexpanded_collection_stays_latex_end_to_end(capsys, monkeypatch):
     mpt.configure(out_format="latex", expand_collections=False)
     result = mpt[value := 3.941 - p23["vgs"]]
 
-    # Three lines, all rendered as LaTeX (none printed as plain text).
+    # Three lines, all rendered as LaTeX (none printed as plain text), and the
+    # substitution line carries the item value rather than the collection.
     assert len(calls) == 3
-    assert r"\left[vgs\right]" in calls[1].data
+    assert "1.85" in calls[1].data
+    assert "model" not in calls[1].data
     assert capsys.readouterr().out == ""
     assert result == 3.941 - _MOSFET["vgs"]

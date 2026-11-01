@@ -71,9 +71,14 @@ Presenter.show(                                   ← 5. вызов после �
 ```
 Presenter.name_text(key, имя, значение)
      ├─ значение модуль/функция/класс/callable? → оставить имя
-     ├─ expand_collections==False и значение — коллекция
-     │  (dict/list/tuple/set/frozenset)?        → оставить имя
+     ├─ expand_collections==False и значение — коллекция? → оставить имя
      └─ иначе → Presenter.value_text(key, значение)
+
+Presenter.subscript_text(key, head, base_name, suffix, base, item, *inner)
+     ├─ expand_collections==False и base — коллекция?
+     │        → value_text(key, item())      ← значение элемента
+     └─ иначе → head + name_text(key, base_name, base)
+                       + suffix.format(*inner)  ← коллекция целиком + индекс
 
 Presenter.value_text(key, значение)
      ├─ text = str(значение)
@@ -119,7 +124,7 @@ Presenter.show(key, name, source, substituted, value)
 | `number_format` | `"power"` | `PowerOfTen` |
 | `multiple_assignment_reduce` | `True` | `Presenter.substituted_text` (шаблон `reduced`) |
 | `reduce_equ_stages` | `True` | `drop_adjacent_repeats` |
-| `expand_collections` | `False` (по умолчанию `True`) | `Presenter.name_text` (оставляет имя коллекции) |
+| `expand_collections` | `False` (по умолчанию `True`) | `Presenter.subscript_text` (подставляет элемент), `Presenter.name_text` (для коллекции без индекса) |
 | `additional_out` | `"latex"` / `"text"` | `Presenter.show_raw` |
 
 ---

@@ -27,7 +27,12 @@ from mcpyrate.quotes import macros, q, a, u, h
 
 from .presentation import Presenter
 from .settings import SettingsStore
-from .source import InPlaceSubstitution, Occurrence, SourceText
+from .source import (
+    InPlaceSubstitution,
+    Occurrence,
+    SourceText,
+    SubscriptOccurrence,
+)
 
 
 class MacroExpander:
@@ -121,13 +126,51 @@ class MacroExpander:
         )
 
     def _occurrence_argument(self, node: Occurrence) -> ast.expr:
-        """AST for one rendered name occurrence, hygienically bound."""
+        """AST for one rendered occurrence, hygienically bound."""
+        if isinstance(node, SubscriptOccurrence):
+            return self._subscript_argument(node)
         name: str
         if isinstance(node, ast.Attribute):
             name = ast.unparse(node)
         else:
             name = node.id
         return q[h[Presenter].name_text(u[self.scope_key], u[name], a[node])]
+
+    def _subscript_argument(self, node: SubscriptOccurrence) -> ast.expr:
+        """AST for one indexed access: ``Presenter.subscript_text(...)``.
+
+        The item is a zero-argument lambda, so it is evaluated only when
+        ``expand_collections=False``; the collection-expanded path keeps the
+        old behaviour and never indexes anything during phase 2.
+        """
+        base_name: str = (
+            ast.unparse(node.base)
+            if isinstance(node.base, ast.Attribute)
+            else node.base.id
+        )
+        item: ast.Lambda = ast.Lambda(
+            args=ast.arguments(
+                posonlyargs=[], args=[], vararg=None,
+                kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[],
+            ),
+            body=node.node,
+        )
+        inner: list[ast.expr] = [
+            self._occurrence_argument(occurrence) for occurrence in node.inner
+        ]
+        args: list[ast.expr] = [
+            ast.Constant(self.scope_key),
+            ast.Constant(node.head),
+            ast.Constant(base_name),
+            ast.Constant(node.suffix),
+            node.base,
+            item,
+        ]
+        args += inner
+        call: ast.Call = ast.Call(
+            func=q[h[Presenter].subscript_text], args=args, keywords=[]
+        )
+        return ast.fix_missing_locations(call)
 
     @staticmethod
     def _innermost_assignment_value(expr: ast.expr) -> ast.expr | None:
