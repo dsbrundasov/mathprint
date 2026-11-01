@@ -353,6 +353,7 @@ mpt.configure(out_order="line", out_format="latex", precision=4)
 | `reduce_equ_stages` | `bool` | `False` | drop repeated adjacent stages from a one-line result |
 | `number_format` | `"exp"` \| `"power"` | `"exp"` | Python's notation, or a power of ten |
 | `additional_out` | `"latex"` \| `"text"` \| `None` | `None` | print the lines again as raw LaTeX or plain text |
+| `expand_collections` | `bool` | `True` | expand dicts/lists/sets in phase 2; `False` keeps the name |
 
 Every argument is optional, and **an omitted argument is left unchanged** — so
 `mpt.configure(precision=2)` only touches the precision:
@@ -365,6 +366,7 @@ mpt.configure(multiple_assignment_reduce=True)  # collapse nested assignments
 mpt.configure(reduce_equ_stages=True)          # drop repeated one-line stages
 mpt.configure(number_format="power")           # 1.23*10**-9 instead of 1.23e-09
 mpt.configure(additional_out="latex")          # raw LaTeX source after the output
+mpt.configure(expand_collections=False)        # keep dict/list names in phase 2
 mpt.configure(reset=True)                      # back to the core: all defaults
 ```
 
@@ -560,6 +562,60 @@ notebook) where it is called; `mpt.configure(number_format="exp")` switches back
 
 > If `precision=n` is also set, the rounded number is still normalized: `a` above
 > with `precision=4` shows `1.23*10**-9` in every phase.
+
+---
+
+## Expand collections
+
+By default, when a variable holds a collection (`dict`, `list`, `tuple`, `set`,
+`frozenset`), its full `repr` is substituted in phase 2. This can make the
+substitution line very long and breaks LaTeX rendering (the expanded dict
+contains colons and braces that `pytexit` cannot parse).
+
+Set `expand_collections=False` to keep the original name instead of expanding it:
+
+```python
+from mathprint import mpt
+
+_p23 = {'model': 'p5', 'gmid': 7.97, 'vgs': 1.85, 'vth': 1.67}
+fi_d21_s23 = 3.941
+
+# Default (expand_collections=True):
+mpt[Vb2 := fi_d21_s23 - _p23['vgs']]
+# Vb2 := fi_d21_s23 - _p23['vgs']
+# Vb2 := 3.941 - {'model': 'p5', 'gmid': 7.97, 'vgs': 1.85, 'vth': 1.67}['vgs']
+# Vb2 := 2.09...
+
+# With expand_collections=False:
+mpt.configure(expand_collections=False)
+mpt[Vb2 := fi_d21_s23 - _p23['vgs']]
+# Vb2 := fi_d21_s23 - _p23['vgs']
+# Vb2 := 3.941 - _p23['vgs']
+# Vb2 := 2.09...
+```
+
+This is especially useful for **LaTeX output** — the shorter substitution line
+renders correctly, and the final value is still computed normally:
+
+```python
+%load_ext mathprint_jupyter
+from mathprint import mpt
+mpt.configure(out_format="latex", expand_collections=False)
+
+_p23 = {'vgs': 1.85}
+mpt[Vb2 := 3.941 - _p23['vgs']]
+# Renders cleanly as LaTeX without the dict expansion breaking pytexit
+```
+
+The setting affects only the display in phase 2 (substitution). The actual
+expression is still evaluated with the real value, and phase 3 (the computed
+value) shows the correct result. `expand_collections=True` (the default)
+restores the full expansion.
+
+`pytexit` has no subscript visitor, so `MathPrint` patches one in: a kept
+subscript renders as LaTeX brackets, e.g. `_p23["vgs"]` becomes
+`_{p23}\left[vgs\right]`. That is what keeps LaTeX mode on with
+`expand_collections=False`.
 
 ---
 
@@ -831,7 +887,9 @@ macro-expansion hook.
 
 For a step-by-step walkthrough of one formula — from `mpt[...]` through macro
 expansion and substitution to the final LaTeX (in Russian) — see
-[docs/execution-path.md](docs/execution-path.md).
+[docs/execution-path.md](docs/execution-path.md). The shorter two-time diagram
+(compile-time expansion vs run-time rendering) is in
+[docs/macro-flow.md](docs/macro-flow.md).
 
 ---
 
@@ -843,6 +901,7 @@ README.md                   # this file
 pyrightconfig.json          # Pyright/Pylance settings
 docs/
   execution-path.md         # step-by-step execution path of one formula (RU)
+  macro-flow.md             # compile-time vs run-time diagram (RU)
 src/
   mathprint/                # helper module (one-liner bootstrap) + no-op stub
     __init__.py
@@ -877,6 +936,7 @@ tests/
   test_additional_out.py    # additional_out=...
   test_multiple_assignment.py  # multiple_assignment_reduce=True
   test_stage_dedup.py       # reduce_equ_stages=True
+  test_expand_collections.py  # expand_collections=True|False, LaTeX subscripts
 examples/
   demo.py                   # script example (`from mathprint import mpt`)
   demo_stub.py              # script example (stub, prints nothing)

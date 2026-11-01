@@ -118,6 +118,34 @@ class LatexRenderer:
             # visitor on the third-party class) stays happy.
             setattr(visitor, "visit_Attribute", visit_Attribute)
 
+        if "visit_Subscript" not in visitor.__dict__:
+            def visit_Subscript(self: Any, n: ast.Subscript) -> str:
+                # No visitor for indexing, so `d["x"]` would fall back to plain
+                # text.  Render it as `d\left[x\right]`; a string key that is a
+                # valid identifier goes through the usual name formatting, so
+                # `_p23['v_gs']` becomes `_{p23}\left[v_{gs}\right]`.  Bracket
+                # form (not a second `_{...}`) keeps names that already end in
+                # a subscript, such as `_p23`, valid LaTeX.
+                base: str = self.visit(n.value)
+                if isinstance(n.value, ast.BinOp):
+                    base = self.parenthesis(base)
+                index: str = self.visit(n.slice)
+                if isinstance(n.slice, ast.Constant) and isinstance(n.slice.value, str):
+                    if n.slice.value.isidentifier():
+                        index = self.visit(ast.Name(id=n.slice.value, ctx=ast.Load()))
+                return r"{0}\left[{1}\right]".format(base, index)
+
+            setattr(visitor, "visit_Subscript", visit_Subscript)
+
+        if "prec_Subscript" not in visitor.__dict__:
+            def prec_Subscript(self: Any, n: ast.Subscript) -> int:
+                # As tight as a name, so `a - d["x"]` and `lst[0] + 1` are not
+                # needlessly wrapped in parentheses (pytexit has no entry for
+                # `Subscript` in `precdic` and would otherwise use 0).
+                return 1000
+
+            setattr(visitor, "prec_Subscript", prec_Subscript)
+
         if "visit_UnaryOp" not in visitor.__dict__:
             def visit_UnaryOp(self: Any, n: ast.UnaryOp) -> str:
                 # pytexit defines `visit_USub` / `visit_UAdd` but no

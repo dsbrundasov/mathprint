@@ -187,6 +187,7 @@ def configure(
     multiple_assignment_reduce: bool | _Unset = _UNSET,
     reduce_equ_stages: bool | _Unset = _UNSET,
     number_format: Literal["exp", "power"] | _Unset = _UNSET,
+    expand_collections: bool | _Unset = _UNSET,
     additional_out: Literal["latex", "text"] | None | _Unset = _UNSET,
 ) -> str:
     """Change the display settings for the file (or notebook) this is called in.
@@ -221,6 +222,10 @@ def configure(
             notation becomes ``1.23*10**-9`` and a plain decimal far from ``1``
             (below ``10**-4`` or at/above ``10**16``) is normalized, e.g.
             ``0.0001106`` -> ``1.106*10**-4``. Applies to every phase.
+        expand_collections: ``True`` (default) substitutes the full ``repr`` of
+            dicts, lists, tuples and sets in phase 2.  ``False`` keeps the
+            original name (e.g. ``_p23["vgs"]`` stays as written), which is
+            useful for LaTeX output and cleaner substitution lines.
         additional_out: ``None`` (default) adds nothing. ``"latex"`` prints the
             same lines again, after the main output, as raw LaTeX source;
             ``"text"`` prints them as the plain Python line. The additional
@@ -263,6 +268,10 @@ def configure(
     if not isinstance(number_format, _Unset):
         changes["number_format"] = _require_choice(
             "number_format", number_format, ("exp", "power")
+        )
+    if not isinstance(expand_collections, _Unset):
+        changes["expand_collections"] = _require_bool(
+            "expand_collections", expand_collections
         )
     if not isinstance(additional_out, _Unset):
         changes["additional_out"] = _require_choice(

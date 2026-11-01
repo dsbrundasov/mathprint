@@ -41,6 +41,7 @@ class _Macro:
         multiple_assignment_reduce: bool = ...,
         reduce_equ_stages: bool = ...,
         number_format: Literal["exp", "power"] = ...,
+        expand_collections: bool = ...,
         additional_out: Literal["latex", "text"] | None = ...,
     ) -> str:
         """Change the display settings for the file (or notebook) this is called in.
@@ -77,6 +78,10 @@ class _Macro:
                 ``1.23*10**-9``, and a plain decimal far from ``1`` (below
                 ``10**-4`` or at/above ``10**16``) is normalized, e.g.
                 ``0.0001106`` -> ``1.106*10**-4``. Applies to every phase.
+            expand_collections: ``True`` (default) substitutes the full ``repr`` of
+                dicts, lists, tuples and sets in phase 2.  ``False`` keeps the
+                original name (e.g. ``_p23["vgs"]`` stays as written), which is
+                useful for LaTeX output and cleaner substitution lines.
             additional_out: ``None`` (default) adds nothing. ``"latex"`` prints
                 the same lines again, after the main output, as raw LaTeX
                 source; ``"text"`` prints them as the plain Python line. The
@@ -108,6 +113,7 @@ def configure(
     multiple_assignment_reduce: bool = ...,
     reduce_equ_stages: bool = ...,
     number_format: Literal["exp", "power"] = ...,
+    expand_collections: bool = ...,
     additional_out: Literal["latex", "text"] | None = ...,
 ) -> str:
     """Change the display settings for the calling file or notebook.
@@ -125,6 +131,7 @@ class DisplaySettings:
     multiple_assignment_reduce: bool = ...
     reduce_equ_stages: bool = ...
     number_format: Literal["exp", "power"] = ...
+    expand_collections: bool = ...
     additional_out: Literal["latex", "text"] | None = ...
 
 class SettingsStore:
@@ -221,6 +228,7 @@ class LatexOutput(LineOutput): ...
 
 class Presenter:
     OPAQUE_TYPES: tuple[type, ...]
+    COLLECTION_TYPES: tuple[type, ...]
     @classmethod
     def value_text(cls, key: str, value: Any) -> str: ...
     @classmethod

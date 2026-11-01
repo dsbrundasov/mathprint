@@ -45,6 +45,10 @@ class DisplaySettings:
     #: ``"exp"``: Python's notation.  ``"power"``: show a power of ten.
     number_format: Literal["exp", "power"] = "exp"
 
+    #: Whether to expand collections (dict, list, tuple, set) in phase 2.
+    #: ``True`` (default): substitute the full repr.  ``False``: keep the name.
+    expand_collections: bool = True
+
     #: Repeat the lines as raw text after the main output (``"latex"`` or
     #: ``"text"``), or ``None`` for no extra output.
     additional_out: Literal["latex", "text"] | None = None

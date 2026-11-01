@@ -216,7 +216,10 @@ Presenter.show(
 1. проверка `isinstance(value, cls.OPAQUE_TYPES) or callable(value)`:
    - модули, функции, методы, классы и прочие вызываемые объекты оставляют своё
      имя;
-2. иначе `Presenter.value_text(key, value)`:
+2. если `expand_collections` равно `False` (по умолчанию `True`) и значение —
+   коллекция (`dict`, `list`, `tuple`, `set`, `frozenset`), имя тоже остаётся:
+   в подстановке будет `_p23["vgs"]`, а не `repr` всего словаря;
+3. иначе `Presenter.value_text(key, value)`:
    - `settings = SettingsStore.settings_for(key)`; `precision` здесь `None`;
    - `number_format` — `"exp"`, поэтому число не переписывается;
    - возвращает `str(value)`.
@@ -297,6 +300,9 @@ Presenter.name_text("<ipython>", "M_P2O5", 141.9)     -> "141.9"
   падает);
 - `visit_Attribute` — точечные обращения (`me.H.atomic_number`);
 - `visit_UnaryOp` — отрицательные числа (`-2.5`, `10**-9`);
+- `visit_Subscript` (и `prec_Subscript`) — индексация: `d["x"]` →
+  `d\left[x\right]`, `lst[2]` → `lst\left[2\right]`. Без этого коллекция,
+  оставленная именем при `expand_collections=False`, выключала бы LaTeX;
 - `visit_Mult` — всегда возвращает `self.tex_multiplier`, т.е. `{\cdot}`, чтобы
   знаки умножения никогда не терялись.
 

@@ -180,16 +180,24 @@ class Presenter:
             text = PowerOfTen.rewrite(text)
         return text
 
+    #: Collection types that can be optionally kept unexpanded in phase 2.
+    COLLECTION_TYPES: tuple[type, ...] = (dict, list, tuple, set, frozenset)
+
     @classmethod
     def name_text(cls, key: str, name: str, value: Any) -> str:
         """What replaces one name occurrence in phase 2.
 
         Modules, functions, methods, built-ins, classes and other callables are
         *not* expanded: they keep the name used in the source (``math.sqrt``
-        stays ``math.sqrt``, ``f`` stays ``f``, ``int`` stays ``int``).  Every
-        other value is rendered by :meth:`value_text`.
+        stays ``math.sqrt``, ``f`` stays ``f``, ``int`` stays ``int``).  If
+        ``expand_collections`` is ``False`` (see :class:`DisplaySettings`),
+        dicts, lists, tuples and sets are also kept as their source name.
+        Every other value is rendered by :meth:`value_text`.
         """
         if isinstance(value, cls.OPAQUE_TYPES) or callable(value):
+            return name
+        settings: DisplaySettings = SettingsStore.settings_for(key)
+        if not settings.expand_collections and isinstance(value, cls.COLLECTION_TYPES):
             return name
         return cls.value_text(key, value)
 
