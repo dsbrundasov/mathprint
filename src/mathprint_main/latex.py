@@ -9,7 +9,13 @@ the macro's lines here is :class:`mathprint_main.presentation.LatexOutput`.
 """
 
 import ast
+import re
 from typing import Any
+
+
+#: A plain assignment ``=``, but not part of ``==``, ``!=``, ``<=``, ``>=``
+#: or ``:=``.  Used by :meth:`LatexRenderer.to_pytex_input`.
+_ASSIGNMENT = re.compile(r"(?<![=!<>:])=(?!=)")
 
 
 class LatexRenderer:
@@ -63,10 +69,14 @@ class LatexRenderer:
     def to_pytex_input(text: str) -> str:
         """Turn a printed line into a Python expression ``py2tex`` can parse.
 
-        The assignment prefix uses ``:=``; ``py2tex`` expects a comparison, so
-        it is rewritten to ``==`` (rendered as ``=``).
+        Both assignment spellings are rewritten to a comparison, which
+        ``py2tex`` renders as ``=``: ``:=`` from ``mpt[x := ...]`` and plain
+        ``=`` from the block form ``with mpt:``.  The latter matters for a
+        chained target (``a = b = c = value``): left as an assignment, Python
+        parses it as ``a = b = (c == value)`` and ``py2tex`` prints only the
+        first target, silently dropping the rest.
         """
-        return text.replace(":=", "==")
+        return _ASSIGNMENT.sub("==", text.replace(":=", "=="))
 
     @staticmethod
     def patch_pytexit() -> None:

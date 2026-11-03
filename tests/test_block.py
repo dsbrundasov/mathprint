@@ -21,6 +21,7 @@ from mcpyrate.core import MacroExpansionError
 
 import mathprint_main
 from mathprint import mpt
+from mathprint_main import LatexOutput, LatexRenderer
 
 
 class _Expander:
@@ -211,6 +212,54 @@ def test_line_layout_attribute(capsys):
         "box.f = 2 * y = 2 * 5 = 10",
     ]
     assert box.f == 10
+
+
+def test_latex_line_keeps_every_chained_simple_target(monkeypatch):
+    # The text passed to show() keeps plain `=` from the assignment targets;
+    # LatexRenderer.to_source converts them to comparisons for py2tex.
+    shown = []
+    monkeypatch.setattr(LatexOutput, "show", shown.append)
+    mpt.configure(out_order="line", out_format="latex")
+    with mpt:
+        aa = bb = cc = dd = 2
+    assert shown == ["aa = bb = cc = dd == 2 == 2 == 2"]
+    tex = LatexRenderer.to_source(shown[0])
+    assert tex is not None
+    for target in ("aa", "bb", "cc", "dd"):
+        assert target in tex
+
+
+def test_latex_line_keeps_every_chained_attribute_target(monkeypatch):
+    # Regression: a chained block assignment rendered as `M21.l = M24.l = ...`;
+    # py2tex saw an assignment and dropped M22/M23.
+    shown = []
+    monkeypatch.setattr(LatexOutput, "show", shown.append)
+
+    class Box:
+        l = 0
+
+    M21 = M22 = M23 = M24 = Box()
+    mpt.configure(out_order="line", out_format="latex")
+    with mpt:
+        M21.l = M22.l = M23.l = M24.l = 2
+    assert shown == ["M21.l = M22.l = M23.l = M24.l == 2 == 2 == 2"]
+    tex = LatexRenderer.to_source(shown[0])
+    assert tex is not None
+    for target in ("M21", "M22", "M23", "M24"):
+        assert target in tex
+
+
+def test_latex_line_keeps_every_walrus_target(monkeypatch):
+    shown = []
+    monkeypatch.setattr(LatexOutput, "show", shown.append)
+    mpt.configure(out_order="line", out_format="latex")
+    mpt[a := (b := (c := 2))]
+    # The text passed to show() already has `:=` -> `==` from the expander.
+    assert shown == ["a == (b := (c := 2)) == (b := (c := 2)) == 2"]
+    tex = LatexRenderer.to_source(shown[0])
+    assert tex is not None
+    for target in ("a", "b", "c"):
+        assert target in tex
 
 
 def test_precision_in_block(capsys):

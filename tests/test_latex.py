@@ -96,6 +96,34 @@ def test_pytexit_input_rewrites_walrus():
     assert LatexRenderer.to_pytex_input("y + 2") == "y + 2"
 
 
+def test_pytexit_input_rewrites_block_assignment_chain():
+    # The block form keeps plain `=` in the line.  py2tex parses that as an
+    # assignment and prints only its first target, so every `=` must become a
+    # comparison before py2tex sees it.
+    assert (
+        LatexRenderer.to_pytex_input("a = b = c == 2 == 2")
+        == "a == b == c == 2 == 2"
+    )
+    assert LatexRenderer.to_pytex_input("a=b=c") == "a==b==c"
+
+
+def test_pytexit_input_keeps_existing_comparisons():
+    for text in ("x == y", "x != y", "x <= y", "x >= y"):
+        assert LatexRenderer.to_pytex_input(text) == text
+
+
+def test_chained_targets_are_not_dropped_in_latex():
+    # Regression: `M21.l = M22.l = M23.l = M24.l = ...` used to render as
+    # `M21.l = M24.l = ...` because py2tex's visit_Assign keeps only targets[0].
+    pytest.importorskip("pytexit")
+    tex = LatexRenderer.to_source(
+        "M21.l = M22.l = M23.l = M24.l == 2*L_min == 2*2.6*10**-6 == 5.2*10**-6"
+    )
+    assert tex is not None
+    for target in ("M21", "M22", "M23", "M24"):
+        assert target in tex
+
+
 def test_latex_switch_scopes_to_calling_file(tmp_path):
     import subprocess
     import sys
