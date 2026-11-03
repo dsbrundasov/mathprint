@@ -47,6 +47,10 @@ class ExpressionReport:
     #: Phase 3: the evaluated value, already rendered as text.
     value_text: str
 
+    #: Assignment operator shown in phase 3: ``":="`` for ``mpt[x := ...]``,
+    #: ``"="`` for the block form ``with mpt: x = ...``.
+    operator: str = ":="
+
 
 class ReportLayout:
     """Place the three phases of a report on one or more lines."""
@@ -76,7 +80,7 @@ class ColumnLayout(ReportLayout):
               drop_repeated: bool = False) -> list[str]:
         # Column mode ignores both flags: one stage per line, never repeated.
         value_line: str = (
-            f"{report.name} := {report.value_text}"
+            f"{report.name} {report.operator} {report.value_text}"
             if report.name else report.value_text
         )
         return [report.source_text, report.substituted_text, value_line]
@@ -94,8 +98,8 @@ class SingleLineLayout(ReportLayout):
         source: str = report.source_text
         substituted: str = report.substituted_text
         if report.name:
-            source = source.split(":=", 1)[1].strip()
-            substituted = substituted.split(":=", 1)[1].strip()
+            source = strip_assignment_prefix(source, report.name)
+            substituted = strip_assignment_prefix(substituted, report.name)
         parts: list[str] = ([report.name] if report.name else []) + [
             source, substituted, report.value_text
         ]
@@ -103,6 +107,20 @@ class SingleLineLayout(ReportLayout):
             parts = drop_adjacent_repeats(parts)
         joiner: str = " == " if for_latex else " = "
         return [joiner.join(parts)]
+
+
+def strip_assignment_prefix(text: str, name: str) -> str:
+    """Remove the ``name :=`` / ``name =`` prefix from one phase.
+
+    ``mpt[x := 3 + y]`` and the block form ``x = 3 + y`` both keep the target
+    text at the start of phases 1 and 2; the one-line layout shows the target
+    once, so the duplicated prefix is removed here.
+    """
+    for separator in (":=", "="):
+        marker = f"{name} {separator}"
+        if marker in text:
+            return text.split(marker, 1)[1].strip()
+    return text
 
 
 def drop_adjacent_repeats(parts: list[str]) -> list[str]:
@@ -250,12 +268,16 @@ class Presenter:
 
     @classmethod
     def show(cls, key: str, name: str, source: str, substituted: str,
-             value: Any) -> Any:
+             value: Any, *, operator: str = ":=") -> Any:
         """Show the whole call and return `value`.
 
         Column mode shows the three phases on separate lines; one-line mode
         joins them (see :class:`ReportLayout`).  ``reduce_equ_stages`` drops
         repeated adjacent stages of a one-line result.
+
+        `operator` is the assignment operator displayed in phase 3: ``":="``
+        for the usual ``mpt[x := ...]`` form, ``"="`` for the block form
+        (``with mpt: x = ...``).
 
         With ``additional_out=...`` the same lines are printed again, after the
         main output, as raw text: LaTeX source (``"latex"``) or Python
@@ -271,6 +293,7 @@ class Presenter:
             source_text=source,
             substituted_text=substituted,
             value_text=cls.value_text(key, value),
+            operator=operator,
         )
 
         layout: ReportLayout = ReportLayout.for_settings(settings)

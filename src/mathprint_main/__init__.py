@@ -43,6 +43,20 @@ Several expressions can be sequenced in one call, one per comma::
 Each item is printed exactly as if it had its own ``mpt[...]`` call, in order,
 and the whole call yields a tuple of the item values.
 
+The block form applies the same display to a whole suite, and allows plain
+``=`` assignments::
+
+    with mpt:
+        x = 3 + y
+        obj.field = x * 2
+
+Each statement is shown exactly as if it had its own ``mpt[...]`` call: a bare
+expression prints the usual three phases, an assignment prints the target and
+the right-hand side (``=`` instead of ``:=``), and statements without an
+expression form (``if``, ``for``, ``def``, ``+=``, annotations) are left
+untouched.  The block does not return a value; use ``mpt[...]`` where one is
+needed.
+
 Usage::
 
     y = 5
@@ -143,6 +157,8 @@ import ast
 import sys
 from typing import Any, Literal, TypeVar
 
+from mcpyrate.core import MacroExpansionError
+
 from .expansion import MacroExpander
 from .latex import LatexRenderer
 from .numbers import PowerOfTen, SignificantDigits, is_real_number
@@ -157,15 +173,43 @@ from .settings import DisplaySettings, SettingsStore
 from .source import InPlaceSubstitution, SourceText
 
 
-def mpt(expr: ast.expr, **kw: Any) -> ast.expr:
+def mpt(expr: ast.expr | list[ast.stmt], **kw: Any) -> ast.expr | list[ast.stmt]:
     """The ``mpt`` macro.
 
     A single ``mpt[expression]`` prints three lines and yields the value.  The
     multi-expression form ``mpt[a, b, ...]`` prints each item exactly as if it
     had its own ``mpt[...]`` call -- in order -- and yields a tuple of the
     values, one per item.
+
+    The block form ``with mpt:`` applies the same display to every statement
+    in its body, and lets assignments use a plain ``=``::
+
+        with mpt:
+            x = 3 + y
+            obj.field = x * 2
+
+    Each statement is shown exactly as it would be under its own ``mpt[...]``;
+    statements without an expression form (``if``, ``for``, ``def``, ``+=``,
+    annotations) are left untouched.
     """
-    return MacroExpander(kw.get("expander")).expand(expr)
+    syntax: Any = kw.get("syntax")
+    expander = MacroExpander(kw.get("expander"))
+    if syntax == "block":
+        if not isinstance(expr, list):
+            raise MacroExpansionError("mpt: expected the body of `with mpt:`")
+        invocation: Any = kw.get("invocation")
+        has_other_items: bool = len(getattr(invocation, "items", ())) > 1
+        return expander.expand_block(
+            expr, kw.get("optional_vars"), has_other_items=has_other_items
+        )
+    if syntax not in (None, "expr"):
+        raise MacroExpansionError(
+            f"mpt: unsupported macro invocation form {syntax!r}; use "
+            "`mpt[expression]` or `with mpt:`."
+        )
+    if isinstance(expr, list):
+        raise MacroExpansionError("mpt: expected an expression, got a statement list")
+    return expander.expand(expr)
 
 
 class _Unset:

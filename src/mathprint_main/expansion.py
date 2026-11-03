@@ -18,11 +18,18 @@ precision, ...) are made at run time by :class:`Presenter` from the scope's
 settings.  That is what lets ``mpt.configure(...)`` affect code expanded
 earlier, and what keeps the core -- substitution plus one Python evaluation --
 independent of every optional feature.
+
+The block form ``with mpt:`` uses the same machinery: each statement of the
+body is expanded as if it had its own ``mpt[...]`` call, except that an
+assignment statement can be written with ``=`` (phases 1 and 2 are the exact
+statement text with only the right-hand side substituted; phase 3 uses
+``operator="="``).
 """
 
 import ast
 from typing import Any
 
+from mcpyrate.core import MacroExpansionError
 from mcpyrate.quotes import macros, q, a, u, h
 
 from .presentation import Presenter
@@ -69,6 +76,103 @@ class MacroExpander:
             return ast.fix_missing_locations(call)
         return self._expand_one(expr)
 
+    # --- block form: `with mpt:` -------------------------------------------
+
+    def expand_block(self, body: list[ast.stmt],
+                     optional_vars: ast.expr | None = None, *,
+                     has_other_items: bool = False) -> list[ast.stmt]:
+        """Expand the body of ``with mpt:``, statement by statement.
+
+        Every statement is treated exactly as if it had its own ``mpt[...]``
+        call: an expression statement prints its three phases, and an
+        assignment prints them with ``=`` instead of ``:=``.  Anything else
+        (``if``, ``for``, ``def``, ``x += 1``, ...) stays untouched -- the
+        block does not invent display rules that ``mpt[...]`` does not have.
+
+        ``with mpt as result:`` is rejected: the block is a statement, so it
+        has no value to bind.
+        """
+        if optional_vars is not None:
+            raise MacroExpansionError(
+                "mpt: `with mpt as ...` is not supported; the block form does "
+                "not produce a value. Use `mpt[expression]` where a value is "
+                "needed."
+            )
+        if has_other_items:
+            # `with mpt, lock:` -- mcpyrate removed `mpt` and handed back the
+            # remaining `with`. Keep it (and its run-time behaviour), but show
+            # the statements in its body.
+            node: ast.stmt = body[0]
+            if isinstance(node, ast.With):
+                node.body = self._expand_body(node.body)
+            return [node]
+        return self._expand_body(body)
+
+    def _expand_body(self, statements: list[ast.stmt]) -> list[ast.stmt]:
+        """Expand each statement of a block, keeping the source order."""
+        expanded: list[ast.stmt] = []
+        for stmt in statements:
+            expanded.extend(self._expand_statement(stmt))
+        return expanded
+
+    def _expand_statement(self, stmt: ast.stmt) -> list[ast.stmt]:
+        """Turn one statement of a ``with mpt:`` block into its display form."""
+        if type(stmt) is ast.Assign:
+            return [self._expand_assign(stmt)]
+        if type(stmt) is ast.Expr and not self._is_mpt_expression(stmt.value):
+            # The same rule as `mpt[expression]`, applied to a statement.
+            shown: ast.Expr = ast.Expr(value=self.expand(stmt.value))
+            ast.copy_location(shown, stmt)
+            return [ast.fix_missing_locations(shown)]
+        return [stmt]
+
+    def _expand_assign(self, stmt: ast.Assign) -> ast.Assign:
+        """Expand ``target = expression`` with the ``=`` display form.
+
+        Phase 1 is the statement exactly as written; phase 2 is the same text
+        with only the right-hand side substituted.  The target is not
+        substituted: it is written, not read, and showing
+        ``<object at 0x...>`` there would be noise.
+        """
+        before, after = self.source_text.text_around(stmt, stmt.value)
+        name: str = self.source_text.text_from_to(
+            stmt.targets[0], stmt.targets[-1]
+        )
+        substitution = InPlaceSubstitution(self.source_text, stmt.value)
+        call: ast.Call = q[h[Presenter].show(
+            u[self.scope_key],
+            u[name],
+            u[self.source_text.text_of(stmt)],
+            a[self._substituted_text_call(
+                stmt.value, "", substitution, before=before, after=after
+            )],
+            a[stmt.value],
+        )]
+        call.keywords.append(ast.keyword(arg="operator", value=ast.Constant("=")))
+        result: ast.Assign = ast.Assign(
+            targets=stmt.targets, value=ast.fix_missing_locations(call),
+            type_comment=stmt.type_comment,
+        )
+        ast.copy_location(result, stmt)
+        return ast.fix_missing_locations(result)
+
+    @staticmethod
+    def _is_mpt_expression(expr: ast.expr) -> bool:
+        """Whether `expr` is already an ``mpt[...]`` / ``mpt.configure(...)``.
+
+        Such a statement is left for mcpyrate (or for the run time), so it is
+        not displayed twice.
+        """
+        if isinstance(expr, ast.Subscript):
+            head: ast.expr = expr.value
+        elif isinstance(expr, ast.Call):
+            head = expr.func
+        else:
+            return False
+        while isinstance(head, ast.Attribute):
+            head = head.value
+        return isinstance(head, ast.Name) and head.id == "mpt"
+
     def _expand_one(self, expr: ast.expr) -> ast.expr:
         """Expand one item into its ``Presenter.show(...)`` call."""
         name: str = self._assignment_name(expr)
@@ -91,20 +195,23 @@ class MacroExpander:
         return ""
 
     def _substituted_text_call(self, expr: ast.expr, name: str,
-                               substitution: InPlaceSubstitution) -> ast.Call:
+                               substitution: InPlaceSubstitution, *,
+                               before: str = "", after: str = "") -> ast.Call:
         """AST for ``Presenter.substituted_text(key, normal, reduced, ...)``.
 
-        `normal` is the phase-2 template of the whole expression.  `reduced`
-        differs only for a nested assignment chain such as
-        ``ro1 := (ro := (ro_БФСС := 2230))``: it then collapses to
-        ``ro1 := 2230``.  Both are built here, and :class:`Presenter` picks one
-        from the settings at run time; the occurrences are shared, because they
-        all live in the innermost value either way.
+        `normal` is the phase-2 template of the whole expression; `before` and
+        `after` wrap it when the expression is the right-hand side of a block
+        assignment (``x = `` / ``)``).  `reduced` differs only for a nested
+        assignment chain such as ``ro1 := (ro := (ro_БФСС := 2230))``: it then
+        collapses to ``ro1 := 2230``.  Both are built here, and
+        :class:`Presenter` picks one from the settings at run time; the
+        occurrences are shared, because they all live in the innermost value
+        either way.
         """
         occurrences: list[ast.expr] = [
             self._occurrence_argument(node) for node in substitution.occurrences
         ]
-        normal: str = substitution.template
+        normal: str = before + substitution.template + after
         reduced: str = normal
         inner: ast.expr | None = (
             self._innermost_assignment_value(expr) if name else None

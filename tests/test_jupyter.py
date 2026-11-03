@@ -32,7 +32,8 @@ def shell():
     finally:
         unload_ipython_extension(ip)
         _clear_scopes()
-        for name in ("a", "b", "c", "k", "mt", "r", "v", "x", "y", "z"):
+        for name in ("a", "b", "box", "c", "data", "k", "mt", "p", "q",
+                     "r", "v", "x", "y", "z"):
             ip.user_ns.pop(name, None)
 
 
@@ -122,3 +123,51 @@ def test_sequence_in_cell(shell):
     assert "y + z" in out and "5 + 10" in out
     assert "y * z" in out and "5 * 10" in out
     assert result.result == (15, 50)   # the call yields a tuple of the values
+
+
+# --- Block form in a cell ---------------------------------------------------
+
+def test_block_in_cell(shell):
+    result, out = _run(
+        shell,
+        "from mathprint import mpt\n"
+        "y = 5\n"
+        "with mpt:\n"
+        "    x = y + 2\n"
+        "    x * 2\n",
+    )
+    assert result.success, result.error_in_exec
+    assert "x = y + 2" in out
+    assert "x = 5 + 2" in out
+    assert "x * 2" in out and "7 * 2" in out
+    assert shell.user_ns["x"] == 7
+
+
+def test_block_attribute_in_cell(shell):
+    result, out = _run(
+        shell,
+        "from mathprint import mpt\n"
+        "class Box:\n"
+        "    f = 0\n"
+        "box = Box()\n"
+        "with mpt:\n"
+        "    box.f = 3 + 4\n",
+    )
+    assert result.success, result.error_in_exec
+    assert "box.f = 3 + 4" in out
+    assert "box.f = 7" in out
+    assert shell.user_ns["box"].f == 7
+
+
+def test_block_line_mode_in_cell(shell):
+    result, out = _run(
+        shell,
+        "from mathprint import mpt\n"
+        "mpt.configure(out_order='line')\n"
+        "y = 5\n"
+        "with mpt:\n"
+        "    x = y + 2\n",
+    )
+    assert result.success, result.error_in_exec
+    assert "x = y + 2 = 5 + 2 = 7" in out
+    assert shell.user_ns["x"] == 7

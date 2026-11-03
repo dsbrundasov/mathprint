@@ -25,6 +25,7 @@ printed value and the macro's return value come from that single evaluation.
 - [Installation](#installation)
 - [Usage](#usage)
 - [Several expressions in one call](#several-expressions-in-one-call)
+- [Block form: `with mpt:`](#block-form-with-mpt)
 - [Jupyter / IPython](#jupyter--ipython)
 - [Configuration](#configuration)
 - [Layout: one line or a column](#layout-one-line-or-a-column)
@@ -80,6 +81,10 @@ mpt[y > (a + z) * 2]
 - Several expressions in one call — `mpt[a, b, ...]` — each printed as if it had
   its own `mpt[...]`, and the call yields a tuple of the values. See
   [Several expressions in one call](#several-expressions-in-one-call).
+- **Block form**: `with mpt:` applies the same display to each statement in the
+  body, and lets assignments use a plain `=` (`x = ...`, `obj.field = ...`,
+  `d[key] = ...`). Bare expressions work exactly as `mpt[...]`. See
+  [Block form](#block-form-with-mpt).
 - All comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`, `is`, `in`, …) and
   chained comparisons (`0 < y < z`).
 - Only **names** and **dotted attribute chains rooted at a name** are
@@ -285,6 +290,77 @@ This is equivalent to writing one `mpt[...]` per expression.
 > A tuple *value* behind a single name is still one expression: `mpt[t]` where
 > `t = (1, 2, 3)` prints the tuple, it does not sequence anything. The sequence
 > form is the top-level comma inside the subscript.
+
+---
+
+## Block form: `with mpt:`
+
+`with mpt:` applies the same three-phase display to every statement in its
+body, and lets assignments use a plain `=` — no walrus, no subscript:
+
+```python
+from mathprint import mpt
+
+y = 5
+
+with mpt:
+    x = y * 7 + 10
+    d["x"] = x
+    x + 1
+```
+
+prints one report per statement, in source order:
+
+```
+x = y * 7 + 10
+x = 5 * 7 + 10
+x = 45
+d["x"] = x
+d["x"] = 45
+d["x"] = 45
+x + 1
+45 + 1
+46
+```
+
+Every target Python itself supports works unchanged:
+
+```python
+with mpt:
+    X = 1
+    obj.field = X + 1
+    d[key] = X
+    a = b = X * 2
+    p, q = 1, 2
+```
+
+The rules are deliberately the same as for `mpt[...]`:
+
+- **Assignments** are shown with `=`, and the right-hand side is substituted
+  (`obj.field = 12` stays `obj.field = 12` in phase 2 — the target is written,
+  not read). The whole statement is printed exactly as written.
+- **Bare expressions** are shown exactly as `mpt[expression]` would show them:
+  `x + 1` becomes `x + 1` / `45 + 1` / `46`.
+- **Everything else is left untouched** — `if`, `for`, `while`, `try`, `with`,
+  `def`, `class`, `return`, `x += 1`, `x: int = 1`. Put an `mpt[...]` inside
+  those blocks when you want a report there. This is the same limitation as
+  the expression form, which cannot wrap a statement either.
+- The block **does not produce a value**; `with mpt as result:` is a clear
+  error. Use `mpt[expression]` where a value is needed.
+- `with mpt, lock:` keeps the other context manager and shows the statements
+  in the body.
+- All display settings keep working, including `out_order="line"`:
+  `x = y + 1 = 5 + 1 = 6`.
+
+To disable the block without touching it, use the no-op stub as usual:
+
+```python
+from mathprint.stub import mpt
+
+with mpt:          # plain Python context manager: the body runs unchanged
+    x = 2 * 3
+    data = {"x": x}
+```
 
 ---
 

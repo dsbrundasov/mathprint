@@ -92,6 +92,33 @@ def test_configure_is_a_silent_no_op():
     ))
 
 
+def test_with_block_runs_the_body_unprinted():
+    _assert_ok(_run(
+        "from mathprint.stub import mpt\n"
+        "class Box:\n"
+        "    f = 0\n"
+        "box = Box()\n"
+        "with mpt:\n"
+        "    x = 2 * 3\n"
+        "    box.f = x + 1\n"
+        "    x + 2\n"
+        "assert x == 6, x\n"
+        "assert box.f == 7, box.f\n"
+        "print('ok')\n"
+    ))
+
+
+def test_with_block_does_not_swallow_exceptions():
+    proc = _run(
+        "from mathprint.stub import mpt\n"
+        "with mpt:\n"
+        "    raise ValueError('boom')\n"
+    )
+    assert proc.returncode != 0
+    assert "ValueError: boom" in proc.stderr
+    assert proc.stdout == ""
+
+
 # --- Isolation: nothing from the project is loaded -------------------------
 
 def test_import_stub_is_self_contained():

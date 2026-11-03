@@ -11,6 +11,18 @@ expression is still evaluated -- once -- but its value is discarded and ``mpt``
 returns ``None``. Nothing is printed, and no macro expansion, import hook,
 ``mcpyrate``, or ``mathprint_main`` is involved.
 
+The block form is an ordinary ``with`` statement. ``with mpt:`` runs its body
+unchanged; assignments keep their plain ``=`` spelling::
+
+    from mathprint.stub import mpt
+
+    with mpt:
+        x = 2 * 3
+        obj.field = x
+
+The stub is a no-op context manager, so the body behaves exactly like the same
+statements without the ``with`` line.
+
 Because the value is discarded, use the stub where the *value* of an ``mpt[...]``
 call is not consumed. The assignment form ``mpt[name := expr]`` still works: the
 ``:=`` executes while the subscript is evaluated, independently of what ``mpt``
@@ -33,7 +45,7 @@ therefore mcpyrate's convention for macro invocations, and it lets the very same
 ``mpt[expr]`` line keep working when replaced by this stub.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 __all__ = ["mpt"]
 
@@ -55,6 +67,14 @@ class _Stub:
 
     def __getitem__(self, item: Any) -> None:
         pass
+
+    def __enter__(self) -> None:
+        """No-op: ``with mpt:`` just runs its body."""
+        return None
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> Literal[False]:
+        """No-op: never suppress an exception raised by the body."""
+        return False
 
     def configure(self, **options: Any) -> None:
         """No-op: display options have no effect when mathprint is disabled."""

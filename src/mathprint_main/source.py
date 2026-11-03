@@ -76,13 +76,46 @@ class SourceText:
     def __init__(self, text: str | None) -> None:
         self.text = text
 
-    def text_of(self, node: ast.expr) -> str:
+    def text_of(self, node: ast.AST) -> str:
         """The exact source text of `node`, or raise."""
         text: str = self._required_text()
         segment: str | None = ast.get_source_segment(text, node)
         if segment is None:
             raise MacroExpansionError("mpt could not find the expression in the source text")
         return segment
+
+    def text_around(self, stmt: ast.stmt, inner: ast.expr) -> tuple[str, str]:
+        """The exact text of `stmt` before and after `inner`.
+
+        Used by the block form: an assignment statement is exactly its
+        right-hand side wrapped in this text, so phase 2 can reproduce the
+        statement verbatim while substituting only the right-hand side.
+        """
+        raw: bytes = self._required_text().encode("utf-8")
+        start: int = self._offset(stmt.lineno, stmt.col_offset)
+        inner_start: int = self._offset(inner.lineno, inner.col_offset)
+        if (inner.end_lineno is None or inner.end_col_offset is None
+                or stmt.end_lineno is None or stmt.end_col_offset is None):
+            raise MacroExpansionError(
+                "mpt needs position information for the assignment statement"
+            )
+        inner_end: int = self._offset(inner.end_lineno, inner.end_col_offset)
+        end: int = self._offset(stmt.end_lineno, stmt.end_col_offset)
+        return (
+            raw[start:inner_start].decode("utf-8"),
+            raw[inner_end:end].decode("utf-8"),
+        )
+
+    def text_from_to(self, first: ast.expr, last: ast.expr) -> str:
+        """The exact source text from the start of `first` to the end of `last`."""
+        raw: bytes = self._required_text().encode("utf-8")
+        start: int = self._offset(first.lineno, first.col_offset)
+        if last.end_lineno is None or last.end_col_offset is None:
+            raise MacroExpansionError(
+                "mpt needs position information for the assignment target"
+            )
+        end: int = self._offset(last.end_lineno, last.end_col_offset)
+        return raw[start:end].decode("utf-8")
 
     def _required_text(self) -> str:
         """The source text, or raise if this context has none."""
